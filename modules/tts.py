@@ -5,49 +5,158 @@ import openai
 from elevenlabs import ElevenLabs
 from pydub import AudioSegment
 from dotenv import load_dotenv
+import librosa
+import soundfile as sf
+import numpy as np
+from scipy import signal
+import subprocess
 
 
 def stretch_audio_to_target_duration(segment_audio, target_duration_ms, temp_dir, i):
-    import librosa
-    import numpy as np
-    import soundfile as sf
-
     actual_duration_ms = len(segment_audio)
+    stretch_ratio = target_duration_ms / actual_duration_ms
 
-    max_stretch_ratio = 1.05
-    stretch_ratio = min(max_stretch_ratio, target_duration_ms / actual_duration_ms)
+    print(f"Segment {i}: Stretching from {actual_duration_ms}ms to target {target_duration_ms}ms")
+    print(f"Using stretch ratio: {stretch_ratio:.2f}x")
 
-    samples = np.array(segment_audio.get_array_of_samples())
-    sample_rate = segment_audio.frame_rate
+    input_file = os.path.join(temp_dir, f"input_{i}.wav")
+    segment_audio.export(input_file, format="wav")
 
-    if segment_audio.sample_width == 2:  # 16-bit audio
-        samples = samples.astype(np.float32) / 32767.0
-    elif segment_audio.sample_width == 4:  # 32-bit audio
-        samples = samples.astype(np.float32) / 2147483647.0
+    output_file = os.path.join(temp_dir, f"stretched_{i}.wav")
 
-    stretched_samples = librosa.effects.time_stretch(samples, rate=1.0 / stretch_ratio)
+    try:
+        subprocess.run([
+            "rubberband",
+            "--time", str(stretch_ratio),
+            "--pitch", "1",
+            "--formant",
+            input_file,
+            output_file
+        ], check=True, stdout=subprocess.DEVNULL)
 
-    if segment_audio.sample_width == 2:
-        stretched_samples = (stretched_samples * 32767.0).astype(np.int16)
-    elif segment_audio.sample_width == 4:
-        stretched_samples = (stretched_samples * 2147483647.0).astype(np.int32)
+        stretched_audio = AudioSegment.from_file(output_file)
 
-    temp_stretched_file = os.path.join(temp_dir, f"stretched_{i}.wav")
-    sf.write(temp_stretched_file, stretched_samples, sample_rate)
+        stretched_duration = len(stretched_audio)
+        expected_duration = int(actual_duration_ms * stretch_ratio)
 
-    stretched_audio = AudioSegment.from_file(temp_stretched_file)
-    os.remove(temp_stretched_file)
+        print(f"Segment {i}: After stretching - Expected: ~{expected_duration}ms, Actual: {stretched_duration}ms")
 
-    stretched_duration_ms = len(stretched_audio)
-    if stretched_duration_ms < target_duration_ms:
-        remaining_silence = target_duration_ms - stretched_duration_ms
-        stretched_audio += AudioSegment.silent(duration=remaining_silence)
+        return stretched_audio
 
-    return stretched_audio
+    except (subprocess.SubprocessError, subprocess.CalledProcessError) as e:
+        print(f"Error executing Rubberband: {e}")
+        print(f"Falling back to librosa for stretching")
+    except FileNotFoundError:
+        print(f"Rubberband executable not found")
+        print(f"Falling back to librosa for stretching")
+    except Exception as e:
+        print(f"Unexpected error using Rubberband: {e}")
+        print(f"Falling back to librosa for stretching")
+
+    try:
+        samples = np.array(segment_audio.get_array_of_samples())
+        sample_rate = segment_audio.frame_rate
+
+        if segment_audio.sample_width == 2:
+            samples = samples.astype(np.float32) / 32767.0
+        elif segment_audio.sample_width == 4:
+            samples = samples.astype(np.float32) / 2147483647.0
+
+        stretched_samples = librosa.effects.time_stretch(
+            samples,
+            rate=1.0 / stretch_ratio,
+            n_fft=2048,
+            hop_length=512
+        )
+
+        if segment_audio.sample_width == 2:
+            stretched_samples = (stretched_samples * 32767.0).astype(np.int16)
+        elif segment_audio.sample_width == 4:
+            stretched_samples = (stretched_samples * 2147483647.0).astype(np.int32)
+
+        sf.write(output_file, stretched_samples, sample_rate)
+
+        stretched_audio = AudioSegment.from_file(output_file)
+
+        return stretched_audio
+    except Exception as e:
+        print(f"Error in librosa fallback: {e}")
+        print(f"Returning original audio")
+        return segment_audio
+
+
+    finally:
+        for temp_file in [input_file, output_file]:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except OSError as e:
+                    print(f"Warning: Could not remove temporary file {temp_file}: {e}")
+
+
+def improve_audio_speedup(segment_audio, speed_factor, temp_dir, i):
+    input_file = os.path.join(temp_dir, f"input_speed_{i}.wav")
+    segment_audio.export(input_file, format="wav")
+
+    output_file = os.path.join(temp_dir, f"sped_up_{i}.wav")
+
+    try:
+        stretch_ratio = 1.0 / speed_factor
+
+        subprocess.run([
+            "rubberband",
+            "--time", str(stretch_ratio),
+            "--pitch", "1",
+            "--formant",
+            input_file,
+            output_file
+        ], check=True, stdout=subprocess.DEVNULL)
+
+        sped_up_audio = AudioSegment.from_file(output_file)
+        return sped_up_audio
+
+    except (subprocess.SubprocessError, subprocess.CalledProcessError) as e:
+        print(f"Error executing Rubberband for speedup: {e}")
+        print("Falling back to librosa method")
+    except FileNotFoundError:
+        print(f"Rubberband executable not found")
+        print("Falling back to librosa method")
+    except Exception as e:
+        print(f"Unexpected error using Rubberband for speedup: {e}")
+        print("Falling back to librosa method")
+
+    # Librosa fallback code
+    try:
+
+        y, sr = librosa.load(input_file, sr=None)
+
+        y_sped_up = librosa.effects.time_stretch(y, rate=speed_factor)
+
+        b, a = signal.butter(4, 0.9, 'low')
+        y_filtered = signal.filtfilt(b, a, y_sped_up)
+
+        sf.write(output_file, y_filtered, sr)
+
+        sped_up_audio = AudioSegment.from_file(output_file)
+        return sped_up_audio
+
+    except Exception as e:
+        print(f"Error in librosa speedup fallback: {e}")
+        print("Using pydub speedup as last resort")
+        return segment_audio.speedup(playback_speed=speed_factor)
+
+    finally:
+        for temp_file in [input_file, output_file]:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except OSError as e:
+                    print(f"Warning: Could not remove temporary file {temp_file}: {e}")
+
 
 def generate_tts_for_segments(translation_file, output_audio_file=None, voice="onyx"):
     load_dotenv()
-    elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+    # elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
 
     if output_audio_file is None:
         base_dir = os.path.dirname(translation_file)
@@ -82,7 +191,8 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
         end_time_ms = int(segment["end"] * 1000)
         target_duration_ms = end_time_ms - start_time_ms
 
-        print(f"Processing segment {i + 1}/{len(segments)}: {text[:50]}...")
+        print(f"Processing segment {i + 1}/{len(segments)}: '{text[:30]}...'")
+        print(f"  Start: {segment['start']}s, End: {segment['end']}s, Target Duration: {target_duration_ms}ms")
 
         temp_file = os.path.join(temp_dir, f"segment_{i}.mp3")
 
@@ -116,13 +226,31 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
             actual_duration_ms = len(segment_audio)
 
+            print(f"  Generated audio duration: {actual_duration_ms}ms")
+
             if actual_duration_ms > target_duration_ms:
                 speed_factor = actual_duration_ms / target_duration_ms
-                segment_audio = segment_audio.speedup(playback_speed=speed_factor)
+                print(f"  Speeding up by factor: {speed_factor:.2f}x")
+                segment_audio = improve_audio_speedup(segment_audio, speed_factor, temp_dir, i)
             elif target_duration_ms > actual_duration_ms > 0:
-                segment_audio = stretch_audio_to_target_duration(segment_audio, target_duration_ms, temp_dir, i)
+                silence_duration_ms = min(1000, int(target_duration_ms - actual_duration_ms) // 2)
+
+                stretch_target_ms = target_duration_ms - silence_duration_ms
+
+                if stretch_target_ms > actual_duration_ms:
+                    segment_audio = stretch_audio_to_target_duration(segment_audio, stretch_target_ms, temp_dir, i)
+
+                segment_audio = segment_audio + AudioSegment.silent(duration=silence_duration_ms)
+
+                print(f"  Final segment duration with silence: {len(segment_audio)}ms vs target {target_duration_ms}ms")
 
             final_audio = final_audio.overlay(segment_audio, position=start_time_ms)
+
+            # Final check
+            final_segment_duration = len(segment_audio)
+            if abs(final_segment_duration - target_duration_ms) > 100:
+                print(
+                    f"  Warning: Final segment duration {final_segment_duration}ms differs from target {target_duration_ms}ms")
 
             os.remove(temp_file)
 
