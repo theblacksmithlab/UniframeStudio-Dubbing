@@ -1,0 +1,58 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env/
+*.venv
+Pipfile
+Pipfile.lock
+poetry.lock
+.env
+
+# PyCharm project files
+.idea/
+
+# macOS system files
+.DS_Store
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Test coverage reports
+htmlcov/
+.coverage
+*.cover
+*.py,cover
+.cache
+nosetests.xml
+coverage.xml
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# MyPy
+.mypy_cache/
+
+# Pyright
+.pyright/
+
+# Bandit security tool
+.bandit/
+
+# pytest
+.pytest_cache/
+
+# Cython
+*.c
+*.so
+build/
+dist/
+
+#
+audio_input/
+output/
