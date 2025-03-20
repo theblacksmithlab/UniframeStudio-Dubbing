@@ -94,7 +94,7 @@ def stretch_audio_to_target_duration(segment_audio, target_duration_ms, temp_dir
                     print(f"Warning: Could not remove temporary file {temp_file}: {e}")
 
 
-def improve_audio_speedup(segment_audio, speed_factor, temp_dir, i):
+def speedup_audio_to_target_duration(segment_audio, speed_factor, temp_dir, i):
     input_file = os.path.join(temp_dir, f"input_speed_{i}.wav")
     segment_audio.export(input_file, format="wav")
 
@@ -154,9 +154,9 @@ def improve_audio_speedup(segment_audio, speed_factor, temp_dir, i):
                     print(f"Warning: Could not remove temporary file {temp_file}: {e}")
 
 
-def generate_tts_for_segments(translation_file, output_audio_file=None, voice="onyx"):
+def generate_tts_for_segments(translation_file, output_audio_file=None, voice="onyx", dealer="openai"):
     load_dotenv()
-    # elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+    elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
 
     if output_audio_file is None:
         base_dir = os.path.dirname(translation_file)
@@ -173,12 +173,12 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
         print("Error: There are no segments in the transcription file.")
         return None
 
-    print(f"Uploaded {len(segments)} segments for voice-over")
+    print(f"Uploaded {len(segments)} segments for voice-over using {dealer}")
 
     temp_dir = "temp_audio_segments"
     os.makedirs(temp_dir, exist_ok=True)
 
-    final_duration_ms = int(segments[-1]["end"] * 1000) + 1000  # +1 second for buffer (test if we need)
+    final_duration_ms = int(segments[-1]["end"] * 1000)
     final_audio = AudioSegment.silent(duration=final_duration_ms)
 
     for i, segment in enumerate(segments):
@@ -196,66 +196,127 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
         temp_file = os.path.join(temp_dir, f"segment_{i}.mp3")
 
-        # elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
-
         try:
-            # For OpenAI API
-            response = openai.audio.speech.create(
-                model="tts-1",
-                voice=voice,
-                input=text
-            )
+            if dealer.lower() == "openai":
+                response = openai.audio.speech.create(
+                    model="tts-1",
+                    voice=voice,
+                    input=text
+                )
 
-            # response = elevenlabs_client.text_to_speech.convert(
-            #     voice_id="Et117koAJzDg0IZtjcim",
-            #     output_format="mp3_44100_128",
-            #     text=text,
-            #     model_id="eleven_multilingual_v2",
-            #     voice_settings= {"similarity_boost": 1, "stability": 1}
-            # )
+                with open(temp_file, "wb") as f:
+                    f.write(response.content)
 
-            # audio_data = b"".join(response)
+            elif dealer.lower() == "elevenlabs":
+                previous_text = ""
+                next_text = ""
 
-            # with open(temp_file, "wb") as f:
-            #     f.write(audio_data)
+                if i > 0:
+                    previous_text = segments[i - 1].get("translated_text", "").strip()
 
-            with open(temp_file, "wb") as f:
-                f.write(response.content)
+                if i < len(segments) - 1:
+                    next_text = segments[i + 1].get("translated_text", "").strip()
+
+                elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
+
+                test_file = os.path.join(temp_dir, f"test_{i}.mp3")
+
+                seed_value = hash(text) % 4294967295
+
+                response = elevenlabs_client.text_to_speech.convert(
+                    voice_id="ksNuhhaBnNLdMLz6SavZ",
+                    output_format="mp3_44100_192",
+                    text=text,
+                    model_id="eleven_multilingual_v2",
+                    voice_settings={
+                        "similarity_boost": 1,
+                        "stability": 0.75,
+                        "speed": 1,
+                        "use_speaker_boost": False
+                    },
+                    previous_text=previous_text,
+                    next_text=next_text,
+                    seed=seed_value
+                )
+
+                audio_data = b"".join(response)
+
+                with open(test_file, "wb") as f:
+                    f.write(audio_data)
+
+                test_audio = AudioSegment.from_file(test_file)
+                actual_duration_ms = len(test_audio)
+
+                print(f"  Test audio duration: {actual_duration_ms}ms")
+
+                needed_speed = actual_duration_ms / target_duration_ms
+
+                if abs(needed_speed - 1.0) > 0.15:
+                    speed_value = max(0.92, min(1.08, needed_speed))
+
+                    print(f"  Using ElevenLabs speed control: {speed_value:.2f}")
+
+                    response = elevenlabs_client.text_to_speech.convert(
+                        voice_id="ksNuhhaBnNLdMLz6SavZ",
+                        output_format="mp3_44100_192",
+                        text=text,
+                        model_id="eleven_multilingual_v2",
+                        voice_settings={
+                            "similarity_boost": 1,
+                            "stability": 0.75,
+                            "speed": speed_value,
+                            "use_speaker_boost": False
+                        },
+                        previous_text=previous_text,
+                        next_text=next_text,
+                        seed=seed_value
+                    )
+
+                    audio_data = b"".join(response)
+
+                    with open(temp_file, "wb") as f:
+                        f.write(audio_data)
+
+                    os.remove(test_file)
+                else:
+                    print(f"  Speed adjustment within 15%, using original generation")
+                    os.rename(test_file, temp_file)
+            else:
+                raise ValueError(f"Unknown TTS dealer: {dealer}. Supported options: openai, elevenlabs")
 
             segment_audio = AudioSegment.from_file(temp_file)
-
             actual_duration_ms = len(segment_audio)
 
-            print(f"  Generated audio duration: {actual_duration_ms}ms")
+            print(f"  Actual audio duration: {actual_duration_ms}ms")
 
             if actual_duration_ms > target_duration_ms:
                 speed_factor = actual_duration_ms / target_duration_ms
-                print(f"  Speeding up by factor: {speed_factor:.2f}x")
-                segment_audio = improve_audio_speedup(segment_audio, speed_factor, temp_dir, i)
+                print(f"  Final adjustment - speeding up by factor: {speed_factor:.2f}x")
+                segment_audio = speedup_audio_to_target_duration(segment_audio, speed_factor, temp_dir, i)
             elif target_duration_ms > actual_duration_ms > 0:
-                silence_duration_ms = min(1000, int(target_duration_ms - actual_duration_ms) // 2)
-
+                silence_duration_ms = min(200, int(target_duration_ms - actual_duration_ms) // 2)
                 stretch_target_ms = target_duration_ms - silence_duration_ms
 
                 if stretch_target_ms > actual_duration_ms:
+                    print(f"  Final adjustment - stretching to: {stretch_target_ms}ms")
                     segment_audio = stretch_audio_to_target_duration(segment_audio, stretch_target_ms, temp_dir, i)
 
                 segment_audio = segment_audio + AudioSegment.silent(duration=silence_duration_ms)
-
                 print(f"  Final segment duration with silence: {len(segment_audio)}ms vs target {target_duration_ms}ms")
 
             final_audio = final_audio.overlay(segment_audio, position=start_time_ms)
 
-            # Final check
             final_segment_duration = len(segment_audio)
             if abs(final_segment_duration - target_duration_ms) > 100:
                 print(
-                    f"  Warning: Final segment duration {final_segment_duration}ms differs from target {target_duration_ms}ms")
+                    f"  WARNING: Final segment duration {final_segment_duration}ms differs from target {target_duration_ms}ms")
 
             os.remove(temp_file)
 
         except Exception as e:
             print(f"Error processing segment {i}: {e}")
+            import traceback
+            traceback.print_exc()
             continue
 
     final_audio.export(output_audio_file, format="mp3")

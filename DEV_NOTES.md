@@ -12,3 +12,6 @@ python3 cli.py translate --input output/timestamped_transcriptions/sample_timest
 
 ## TTS (text-to-speech):
 python3 cli.py tts --input output/timestamped_transcriptions/sample_timestamped_corrected_cleaned_translated.json
+
+python3 cli.py tts --input output/timestamped_transcriptions/output_timestamped_corrected_cleaned_translated.json --dealer elevenlabs
+
