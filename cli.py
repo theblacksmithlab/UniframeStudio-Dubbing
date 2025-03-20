@@ -53,7 +53,10 @@ def main():
     tts_parser.add_argument("--input", "-i", required=True,
                             help="Path to translated transcription file")
     tts_parser.add_argument("--output", "-o", help="Path to save the audio file (optional)")
-    tts_parser.add_argument("--voice", "-v", default="onyx", help="Voice for dubbing (default: onyx)")
+    tts_parser.add_argument("--dealer", "-d", default="openai", choices=["openai", "elevenlabs"],
+                            help="TTS service provider (default: openai)")
+    tts_parser.add_argument("--voice", "-v", default="onyx",
+                            help="Voice for dubbing (only used for OpenAI, default: onyx)")
 
     # Parsing arguments
     args = parser.parse_args()
@@ -130,17 +133,20 @@ def main():
             print(f"Error translating segments: {e}")
             return
 
+
     elif args.command == "tts":
         if not os.path.exists(args.input):
             print(f"Error: Translated transcription file {args.input} not found.")
             return
 
-        print(f"Voicing-over translated segments: {args.input}")
+        print(f"Voicing-over translated segments using {args.dealer}: {args.input}")
         try:
-            result_file = generate_tts_for_segments(args.input, args.output, args.voice)
+            result_file = generate_tts_for_segments(args.input, args.output, args.voice, args.dealer)
             print(f"Voicing-over completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error voicing-over segments: {e}")
+            import traceback
+            traceback.print_exc()
             return
 
 if __name__ == "__main__":
