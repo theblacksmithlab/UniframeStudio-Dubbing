@@ -33,7 +33,7 @@ def is_sentence_complete(text):
     return text[-1] in ['.', '!', '?']
 
 
-def correct_transcript_segments(input_file, output_file=None):
+def correct_transcript_segments(input_file, output_file=None, start_timestamp=None):
     if output_file is None:
         base_dir = os.path.dirname(input_file)
         base_name = os.path.splitext(os.path.basename(input_file))[0]
@@ -92,6 +92,14 @@ def correct_transcript_segments(input_file, output_file=None):
             full_text += " " + segment["text"].strip()
 
     transcript['text'] = full_text.strip()
+
+    if start_timestamp is not None:
+        for segment in transcript['segments']:
+            if segment['id'] == 0 and not segment.get("merged", False):
+                old_start = segment["start"]
+                segment["start"] = start_timestamp
+                print(f"Corrected start time for first segment from {old_start} to {start_timestamp}")
+                break
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)

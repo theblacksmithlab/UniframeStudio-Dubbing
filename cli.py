@@ -8,6 +8,7 @@ from modules.transcribe_with_timestamps import transcribe_audio_with_timestamps
 from modules.transcription_correction import correct_transcript_segments
 from modules.translation import translate_transcript_segments
 from modules.tts import generate_tts_for_segments
+from modules.video_to_audio_conversion import extract_audio
 
 
 def main():
@@ -22,6 +23,10 @@ def main():
     # Sub-parsers for commands initialization
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
+    # Audio extraction sub-parser
+    extract_parser = subparsers.add_parser("extract_audio", help="Extracting audio from video file")
+    extract_parser.add_argument("--input", "-i", required=True, help="Input video-file path")
+
     # Transcription command sub-parser
     transcribe_parser = subparsers.add_parser("transcribe", help="Transcribes audio with timestamps")
     transcribe_parser.add_argument("--input", "-i", required=True, help="Input audio-file path")
@@ -31,6 +36,8 @@ def main():
     correct_parser.add_argument("--input", "-i", required=True, help="Path to transcription file")
     correct_parser.add_argument("--output", "-o",
                                 help="Path to save structured transcription (optional)")
+    correct_parser.add_argument("--start_timestamp", "-st", type=float,
+                                help="Set specific start timestamp for the first segment (e.g. 0.0 or 4.0)")
 
     # Sub-parse for clearing segments command
     cleanup_parser = subparsers.add_parser("cleanup",
@@ -57,6 +64,10 @@ def main():
                             help="TTS service provider (default: openai)")
     tts_parser.add_argument("--voice", "-v", default="onyx",
                             help="Voice for dubbing (only used for OpenAI, default: onyx)")
+    tts_parser.add_argument("--intro", action="store_true",
+                            help="Add intro audio at the beginning (replaces first 4 seconds)")
+    tts_parser.add_argument("--outro", action="store_true",
+                            help="Add outro audio after the last segment")
 
     # Parsing arguments
     args = parser.parse_args()
@@ -80,6 +91,17 @@ def main():
             print(f"Error during transcription: {e}")
             return
 
+    elif args.command == "extract_audio":
+        if not os.path.exists(args.input):
+            print(f"Error: Video file {args.input} not found.")
+        try:
+            result_file = extract_audio(args.input)
+            print(f"Extracting audio from video file completed successfully."
+                  f"The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error during video conversion: {e}")
+            return
+
     elif args.command == "correct":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
@@ -87,7 +109,7 @@ def main():
 
         print(f"Restructuring transcription segments: {args.input}")
         try:
-            result_file = correct_transcript_segments(args.input, args.output)
+            result_file = correct_transcript_segments(args.input, args.output, args.start_timestamp)
             print(f"Restructuring completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during restructuring: {e}")
@@ -141,7 +163,10 @@ def main():
 
         print(f"Voicing-over translated segments using {args.dealer}: {args.input}")
         try:
-            result_file = generate_tts_for_segments(args.input, args.output, args.voice, args.dealer)
+            result_file = generate_tts_for_segments(
+                args.input, args.output, args.voice, args.dealer,
+                intro=args.intro, outro=args.outro
+            )
             print(f"Voicing-over completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error voicing-over segments: {e}")

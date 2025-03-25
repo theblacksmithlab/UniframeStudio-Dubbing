@@ -154,7 +154,7 @@ def speedup_audio_to_target_duration(segment_audio, speed_factor, temp_dir, i):
                     print(f"Warning: Could not remove temporary file {temp_file}: {e}")
 
 
-def generate_tts_for_segments(translation_file, output_audio_file=None, voice="onyx", dealer="openai"):
+def generate_tts_for_segments(translation_file, output_audio_file=None, voice="onyx", dealer="openai", intro=False, outro=False):
     load_dotenv()
     elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
 
@@ -322,6 +322,34 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
     final_audio.export(output_audio_file, format="mp3")
     print(f"Done! Audio file saved to {output_audio_file}")
 
-    shutil.rmtree(temp_dir)
+    intro_outro_file = "resources/intro_outro.wav"
+    if (intro or outro) and os.path.exists(intro_outro_file):
+        try:
+            main_audio = AudioSegment.from_file(output_audio_file)
 
+            special_audio = AudioSegment.from_file(intro_outro_file)
+            intro_length_ms = 4000
+
+            special_audio = special_audio[:intro_length_ms]
+
+            combined_audio = main_audio
+
+            if intro:
+                combined_audio = special_audio + main_audio[intro_length_ms:]
+                print(f"Replaced first {intro_length_ms / 1000} seconds with intro.")
+
+            if outro:
+                combined_audio = combined_audio + special_audio
+                print(f"Added outro to the end of the audio file.")
+
+            combined_audio.export(output_audio_file, format="mp3")
+            print(f"Final audio duration: {len(combined_audio) / 1000:.2f} seconds")
+        except Exception as e:
+            print(f"Error adding intro/outro: {e}")
+            import traceback
+            traceback.print_exc()
+    elif intro or outro:
+        print(f"Warning: Intro/outro file {intro_outro_file} not found, skipping.")
+
+    shutil.rmtree(temp_dir)
     return output_audio_file
