@@ -35,8 +35,8 @@ python3 cli.py tts --input output/timestamped_transcriptions/sample_timestamped_
 # Process a specific video file
 python3 processing_video_pipeline.py --input video_input/sample.mp4
 
-# Process a specific video with a start timestamp
-python processing_video_pipeline.py --input video_input/sample.mp4 --start_timestamp 4.0
+# Process a specific video with a start offset for intro
+python3 processing_video_pipeline.py --input video_input/sample.mp4 --start_timestamp 4.0
 
 # WARNING! Process ALL videos in the default input directory with a start timestamp
-python processing_video_pipeline.py --input input --start_timestamp 4.0
+python processing_video_pipeline.py --input input_directory --start_timestamp 4.0
