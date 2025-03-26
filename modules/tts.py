@@ -279,7 +279,7 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
                     os.remove(test_file)
                 else:
-                    print(f"  Speed adjustment within 15%, using original generation")
+                    print(f"  Speed adjustment within 8%, using original generation")
                     os.rename(test_file, temp_file)
             else:
                 raise ValueError(f"Unknown TTS dealer: {dealer}. Supported options: openai, elevenlabs")
@@ -309,7 +309,7 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
             final_segment_duration = len(segment_audio)
             if abs(final_segment_duration - target_duration_ms) > 100:
                 print(
-                    f"  WARNING: Final segment duration {final_segment_duration}ms differs from target {target_duration_ms}ms")
+                    f"  WARNING! Final segment duration {final_segment_duration}ms differs from target {target_duration_ms}ms")
 
             os.remove(temp_file)
 

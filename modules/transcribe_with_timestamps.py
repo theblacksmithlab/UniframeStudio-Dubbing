@@ -66,7 +66,8 @@ def transcribe(file_path):
             response_format="verbose_json",
             timestamp_granularities=["segment"],
             language="ru",
-            temperature=0.2
+            temperature=0.2,
+            prompt="Разделяй текст на сегменты строго по законченным предложениям."
         )
 
     try:

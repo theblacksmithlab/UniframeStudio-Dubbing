@@ -8,6 +8,7 @@ from modules.transcribe_with_timestamps import transcribe_audio_with_timestamps
 from modules.transcription_correction import correct_transcript_segments
 from modules.translation import translate_transcript_segments
 from modules.tts import generate_tts_for_segments
+from modules.tts_correction import regenerate_segment, replace_segment_in_audio
 from modules.video_to_audio_conversion import extract_audio
 
 
@@ -68,6 +69,34 @@ def main():
                             help="Add intro audio at the beginning (replaces first 4 seconds)")
     tts_parser.add_argument("--outro", action="store_true",
                             help="Add outro audio after the last segment")
+
+    # Sub-parser for regenerating a single segment
+    segment_tts_parser = subparsers.add_parser("segment-tts",
+                                               help="Regenerate audio for a specific segment with updated translation")
+    segment_tts_parser.add_argument("--input", "-i", required=True,
+                                    help="Path to translated transcription file")
+    segment_tts_parser.add_argument("--segment-id", "-s", required=True, type=int,
+                                    help="ID of the segment to regenerate")
+    segment_tts_parser.add_argument("--output", "-o",
+                                    help="Path to save the segment audio file (optional)")
+    segment_tts_parser.add_argument("--dealer", "-d", default="openai", choices=["openai", "elevenlabs"],
+                                    help="TTS service provider (default: openai)")
+    segment_tts_parser.add_argument("--voice", "-v", default="onyx",
+                                    help="Voice for dubbing (only used for OpenAI, default: onyx)")
+
+    # Add a new sub-parser for replacing a segment in the main audio
+    replace_segment_parser = subparsers.add_parser("replace-segment",
+                                                   help="Replace a segment in the main audio file with new audio")
+    replace_segment_parser.add_argument("--main-audio", "-m", required=True,
+                                        help="Path to the main audio file")
+    replace_segment_parser.add_argument("--segment-audio", "-s", required=True,
+                                        help="Path to the new segment audio file")
+    replace_segment_parser.add_argument("--translation", "-t", required=True,
+                                        help="Path to the translation file with segment timestamps")
+    replace_segment_parser.add_argument("--segment-id", "-i", required=True, type=int,
+                                        help="ID of the segment to replace")
+    replace_segment_parser.add_argument("--output", "-o",
+                                        help="Path to save the new audio file (optional)")
 
     # Parsing arguments
     args = parser.parse_args()
@@ -170,6 +199,52 @@ def main():
             print(f"Voicing-over completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error voicing-over segments: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+
+    # And in the command processing section:
+    elif args.command == "segment-tts":
+        if not os.path.exists(args.input):
+            print(f"Error: Translated transcription file {args.input} not found.")
+            return
+
+        print(f"Regenerating segment {args.segment_id} using {args.dealer}: {args.input}")
+        try:
+            result_file = regenerate_segment(
+                args.input, args.segment_id, args.output, args.voice, args.dealer
+            )
+            if result_file:
+                print(f"Segment regeneration completed successfully. The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error regenerating segment: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+
+    # And in the command processing section:
+    elif args.command == "replace-segment":
+        if not os.path.exists(args.main_audio):
+            print(f"Error: Main audio file {args.main_audio} not found.")
+            return
+
+        if not os.path.exists(args.segment_audio):
+            print(f"Error: Segment audio file {args.segment_audio} not found.")
+            return
+
+        if not os.path.exists(args.translation):
+            print(f"Error: Translation file {args.translation} not found.")
+            return
+
+        print(f"Replacing segment {args.segment_id} in main audio file: {args.main_audio}")
+        try:
+            result_file = replace_segment_in_audio(
+                args.main_audio, args.segment_audio, args.translation, args.segment_id, args.output
+            )
+            if result_file:
+                print(f"Segment replacement completed successfully. The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error replacing segment: {e}")
             import traceback
             traceback.print_exc()
             return

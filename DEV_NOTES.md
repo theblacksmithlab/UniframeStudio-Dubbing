@@ -9,11 +9,9 @@ python3 cli.py transcribe --input audio_input/sample.mp3
 
 ## Timestamped transcription correction:
 python3 cli.py correct --input output/timestamped_transcriptions/sample_timestamped.json
-or
+
 # First segment start timestamp correction (for W3A only):
-python3 cli.py correct --input sample_timestamped.json --start_timestamp 4.0
-or
-python3 cli.py correct -i transcription.json -st 4.0
+python3 cli.py correct --input output/timestamped_transcriptions/sample_timestamped.json --start_timestamp 4.0
 
 ## Corrected timestamped transcription cleaning up:
 python3 cli.py cleanup --input output/timestamped_transcriptions/sample_timestamped_corrected.json
@@ -40,3 +38,9 @@ python3 processing_video_pipeline.py --input video_input/sample.mp4 --start_time
 
 # WARNING! Process ALL videos in the default input directory with a start timestamp
 python processing_video_pipeline.py --input input_directory --start_timestamp 4.0
+
+# Regenerating segment by id:
+python3 cli.py segment-tts --input output/timestamped_transcriptions/sample_timestamped_corrected_cleaned_translated.json --segment-id 1 --dealer elevenlabs --output custom_segment_1.mp3
+
+# Replace segment by custom one:
+python3 cli.py replace-segment --main-audio output/timestamped_transcriptions/sample.mp3 --segment-audio custom_segment_1.mp3 --translation output/timestamped_transcriptions/sample_timestamped_corrected_cleaned_translated.json --segment-id 1

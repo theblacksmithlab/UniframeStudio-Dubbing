@@ -57,3 +57,4 @@ dist/
 audio_input/
 output/
 video_input/
+*.mp3
