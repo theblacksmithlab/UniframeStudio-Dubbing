@@ -1,8 +1,11 @@
 import os
 import json
 import shutil
+import ssl
+import time
+
 import openai
-from elevenlabs import ElevenLabs
+import requests
 from pydub import AudioSegment
 from dotenv import load_dotenv
 import librosa
@@ -30,6 +33,7 @@ def stretch_audio_to_target_duration(segment_audio, target_duration_ms, temp_dir
             "--time", str(stretch_ratio),
             "--pitch", "1",
             "--formant",
+            "--fine",
             input_file,
             output_file
         ], check=True, stdout=subprocess.DEVNULL)
@@ -108,6 +112,7 @@ def speedup_audio_to_target_duration(segment_audio, speed_factor, temp_dir, i):
             "--time", str(stretch_ratio),
             "--pitch", "1",
             "--formant",
+            "--fine",
             input_file,
             output_file
         ], check=True, stdout=subprocess.DEVNULL)
@@ -127,16 +132,11 @@ def speedup_audio_to_target_duration(segment_audio, speed_factor, temp_dir, i):
 
     # Librosa fallback code
     try:
-
         y, sr = librosa.load(input_file, sr=None)
-
         y_sped_up = librosa.effects.time_stretch(y, rate=speed_factor)
-
         b, a = signal.butter(4, 0.9, 'low')
         y_filtered = signal.filtfilt(b, a, y_sped_up)
-
         sf.write(output_file, y_filtered, sr)
-
         sped_up_audio = AudioSegment.from_file(output_file)
         return sped_up_audio
 
@@ -217,32 +217,60 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
                 if i < len(segments) - 1:
                     next_text = segments[i + 1].get("translated_text", "").strip()
 
-                elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
+                if not hasattr(generate_tts_for_segments, 'segment_request_ids'):
+                    generate_tts_for_segments.segment_request_ids = {}
 
                 test_file = os.path.join(temp_dir, f"test_{i}.mp3")
 
                 seed_value = hash(text) % 4294967295
 
-                response = elevenlabs_client.text_to_speech.convert(
-                    voice_id="ksNuhhaBnNLdMLz6SavZ",
-                    output_format="mp3_44100_192",
-                    text=text,
-                    model_id="eleven_multilingual_v2",
-                    voice_settings={
+                request_data = {
+                    "text": text,
+                    "model_id": "eleven_multilingual_v2",
+                    "output_format": "mp3_44100_192",
+                    "voice_settings": {
                         "similarity_boost": 1,
                         "stability": 0.75,
                         "speed": 1,
                         "use_speaker_boost": False
                     },
-                    previous_text=previous_text,
-                    next_text=next_text,
-                    seed=seed_value
+                    "previous_text": previous_text,
+                    "next_text": next_text,
+                    "seed": seed_value
+                }
+
+                if i > 0:
+                    previous_ids = []
+                    if i - 1 in generate_tts_for_segments.segment_request_ids:
+                        previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 1])
+                    if i - 2 in generate_tts_for_segments.segment_request_ids:
+                        previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 2])
+                    if previous_ids:
+                        request_data["previous_request_ids"] = previous_ids[:3]
+
+                    if previous_ids:
+                        print(f"  Using previous request IDs: {previous_ids}")
+                        request_data["previous_request_ids"] = previous_ids[:3]
+                    else:
+                        print("  No previous request IDs available")
+
+                headers = {"xi-api-key": elevenlabs_api_key}
+
+                response = make_api_request_with_retry(
+                    f"https://api.elevenlabs.io/v1/text-to-speech/ksNuhhaBnNLdMLz6SavZ/stream",
+                    request_data,
+                    headers
                 )
 
-                audio_data = b"".join(response)
+                current_request_id = response.headers.get("request-id")
+                if current_request_id:
+                    generate_tts_for_segments.segment_request_ids[i] = current_request_id
+                    print(f"  Got request_id: {current_request_id}")
+                else:
+                    print("  Warning: No request_id received in response")
 
                 with open(test_file, "wb") as f:
-                    f.write(audio_data)
+                    f.write(response.content)
 
                 test_audio = AudioSegment.from_file(test_file)
                 actual_duration_ms = len(test_audio)
@@ -256,26 +284,21 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
                     print(f"  Using ElevenLabs speed control: {speed_value:.2f}")
 
-                    response = elevenlabs_client.text_to_speech.convert(
-                        voice_id="ksNuhhaBnNLdMLz6SavZ",
-                        output_format="mp3_44100_192",
-                        text=text,
-                        model_id="eleven_multilingual_v2",
-                        voice_settings={
-                            "similarity_boost": 1,
-                            "stability": 0.75,
-                            "speed": speed_value,
-                            "use_speaker_boost": False
-                        },
-                        previous_text=previous_text,
-                        next_text=next_text,
-                        seed=seed_value
+                    request_data["voice_settings"]["speed"] = speed_value
+
+                    response = make_api_request_with_retry(
+                        f"https://api.elevenlabs.io/v1/text-to-speech/ksNuhhaBnNLdMLz6SavZ/stream",
+                        request_data,
+                        headers
                     )
 
-                    audio_data = b"".join(response)
+                    new_request_id = response.headers.get("request-id")
+                    if new_request_id:
+                        generate_tts_for_segments.segment_request_ids[i] = new_request_id
+                        print(f"  Updated request_id: {new_request_id}")
 
                     with open(temp_file, "wb") as f:
-                        f.write(audio_data)
+                        f.write(response.content)
 
                     os.remove(test_file)
                 else:
@@ -353,3 +376,27 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
     shutil.rmtree(temp_dir)
     return output_audio_file
+
+
+def make_api_request_with_retry(url, data, headers, max_retries=10, retry_delay=2):
+    retries = 0
+    last_exception = None
+
+    while retries < max_retries:
+        try:
+            response = requests.post(url, json=data, headers=headers)
+            if response.status_code == 200:
+                return response
+            else:
+                print(f"  API error (attempt {retries + 1}/{max_retries}): {response.status_code} - {response.text}")
+        except (requests.RequestException, TimeoutError, ConnectionError, ssl.SSLError) as e:
+            last_exception = e
+            print(f"  Request failed (attempt {retries + 1}/{max_retries}): {e}")
+
+        retries += 1
+        if retries < max_retries:
+            sleep_time = retry_delay * retries
+            print(f"  Retrying in {sleep_time} seconds...")
+            time.sleep(sleep_time)
+
+    raise Exception(f"Failed after {max_retries} attempts. Last error: {last_exception}")

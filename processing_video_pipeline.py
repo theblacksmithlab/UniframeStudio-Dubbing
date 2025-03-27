@@ -10,7 +10,6 @@ from pathlib import Path
 
 
 def run_command(command):
-    """Execute a command and return its result"""
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         return result.stdout
@@ -21,7 +20,6 @@ def run_command(command):
 
 
 def process_single_file(video_path, args):
-    """Process a single video file through the first four stages of processing"""
     video_filename = os.path.basename(video_path)
     base_name = os.path.splitext(video_filename)[0]
 
@@ -41,7 +39,6 @@ def process_single_file(video_path, args):
         if match:
             audio_path = match.group(1).strip()
         else:
-            # Try alternate pattern
             match = re.search(r"Audio successfully extracted: (.*?)$", extract_output, re.MULTILINE)
             if match:
                 audio_path = match.group(1).strip()
@@ -57,14 +54,12 @@ def process_single_file(video_path, args):
     transcribe_cmd = [sys.executable, "cli.py", "transcribe", "--input", audio_path]
     transcribe_output = run_command(transcribe_cmd)
 
-    # Parse the output to get the transcription file path
     transcription_path = None
     if transcribe_output:
         match = re.search(r"saved in file: (.*?)$", transcribe_output, re.MULTILINE)
         if match:
             transcription_path = match.group(1).strip()
         else:
-            # Try alternate pattern
             match = re.search(r"Result: (.*?)$", transcribe_output, re.MULTILINE)
             if match:
                 transcription_path = match.group(1).strip()
@@ -79,7 +74,6 @@ def process_single_file(video_path, args):
     print(f"\n[Step 3/4] Structuring transcription {os.path.basename(transcription_path)}...")
     correct_cmd = [sys.executable, "cli.py", "correct", "--input", transcription_path]
 
-    # Add start_timestamp if specified
     if args.start_timestamp is not None:
         correct_cmd.extend(["--start_timestamp", str(args.start_timestamp)])
 
@@ -103,7 +97,6 @@ def process_single_file(video_path, args):
     cleanup_cmd = [sys.executable, "cli.py", "cleanup", "--input", corrected_path]
     cleanup_output = run_command(cleanup_cmd)
 
-    # Parse the output to get the cleaned file path
     cleaned_path = None
     if cleanup_output:
         match = re.search(r"saved in file: (.*?)$", cleanup_output, re.MULTILINE)

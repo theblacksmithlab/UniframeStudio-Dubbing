@@ -101,6 +101,12 @@ def correct_transcript_segments(input_file, output_file=None, start_timestamp=No
                 print(f"Corrected start time for first segment from {old_start} to {start_timestamp}")
                 break
 
+        if 'words' in transcript and transcript['words']:
+            first_word = transcript['words'][0]
+            old_word_start = first_word["start"]
+            first_word["start"] = start_timestamp
+            print(f"Corrected start time for first word from {old_word_start} to {start_timestamp}")
+
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)
 

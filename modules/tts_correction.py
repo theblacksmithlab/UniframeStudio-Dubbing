@@ -2,11 +2,10 @@ import os
 import json
 import shutil
 import openai
-from elevenlabs import ElevenLabs
 from pydub import AudioSegment
 from dotenv import load_dotenv
 
-from modules.tts import speedup_audio_to_target_duration, stretch_audio_to_target_duration
+from modules.tts import speedup_audio_to_target_duration, stretch_audio_to_target_duration, make_api_request_with_retry
 
 
 def regenerate_segment(translation_file, segment_id, output_audio_file=None, voice="onyx", dealer="openai"):
@@ -70,7 +69,6 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
     temp_file = os.path.join(temp_dir, f"segment_{segment_id}.mp3")
 
     try:
-        # Generate TTS - this part is similar to generate_tts_for_segments
         if dealer.lower() == "openai":
             response = openai.audio.speech.create(
                 model="tts-1",
@@ -82,32 +80,43 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
                 f.write(response.content)
 
         elif dealer.lower() == "elevenlabs":
-            elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
-
             test_file = os.path.join(temp_dir, f"test_{segment_id}.mp3")
 
             seed_value = hash(text) % 4294967295
 
-            response = elevenlabs_client.text_to_speech.convert(
-                voice_id="ksNuhhaBnNLdMLz6SavZ",
-                output_format="mp3_44100_192",
-                text=text,
-                model_id="eleven_multilingual_v2",
-                voice_settings={
+            request_data = {
+                "text": text,
+                "model_id": "eleven_multilingual_v2",
+                "output_format": "mp3_44100_192",
+                "voice_settings": {
                     "similarity_boost": 1,
                     "stability": 0.75,
                     "speed": 1,
                     "use_speaker_boost": False
                 },
-                previous_text=previous_text,
-                next_text=next_text,
-                seed=seed_value
+                "previous_text": previous_text,
+                "next_text": next_text,
+                "seed": seed_value
+            }
+
+            if not hasattr(regenerate_segment, 'segment_request_ids'):
+                regenerate_segment.segment_request_ids = {}
+
+            headers = {"xi-api-key": elevenlabs_api_key}
+
+            response = make_api_request_with_retry(
+                f"https://api.elevenlabs.io/v1/text-to-speech/ksNuhhaBnNLdMLz6SavZ/stream",
+                request_data,
+                headers
             )
 
-            audio_data = b"".join(response)
+            current_request_id = response.headers.get("request-id")
+            if current_request_id:
+                regenerate_segment.segment_request_ids[segment_id] = current_request_id
+                print(f"  Got request_id: {current_request_id}")
 
             with open(test_file, "wb") as f:
-                f.write(audio_data)
+                f.write(response.content)
 
             test_audio = AudioSegment.from_file(test_file)
             actual_duration_ms = len(test_audio)
@@ -121,26 +130,21 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
 
                 print(f"  Using ElevenLabs speed control: {speed_value:.2f}")
 
-                response = elevenlabs_client.text_to_speech.convert(
-                    voice_id="ksNuhhaBnNLdMLz6SavZ",
-                    output_format="mp3_44100_192",
-                    text=text,
-                    model_id="eleven_multilingual_v2",
-                    voice_settings={
-                        "similarity_boost": 1,
-                        "stability": 0.75,
-                        "speed": speed_value,
-                        "use_speaker_boost": False
-                    },
-                    previous_text=previous_text,
-                    next_text=next_text,
-                    seed=seed_value
+                request_data["voice_settings"]["speed"] = speed_value
+
+                response = make_api_request_with_retry(
+                    f"https://api.elevenlabs.io/v1/text-to-speech/ksNuhhaBnNLdMLz6SavZ/stream",
+                    request_data,
+                    headers
                 )
 
-                audio_data = b"".join(response)
+                new_request_id = response.headers.get("request-id")
+                if new_request_id:
+                    regenerate_segment.segment_request_ids[segment_id] = new_request_id
+                    print(f"  Updated request_id: {new_request_id}")
 
                 with open(temp_file, "wb") as f:
-                    f.write(audio_data)
+                    f.write(response.content)
 
                 os.remove(test_file)
             else:

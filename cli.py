@@ -10,6 +10,7 @@ from modules.translation import translate_transcript_segments
 from modules.tts import generate_tts_for_segments
 from modules.tts_correction import regenerate_segment, replace_segment_in_audio
 from modules.video_to_audio_conversion import extract_audio
+from modules.optimized_segmentation import optimize_transcription_segments
 
 
 def main():
@@ -46,6 +47,14 @@ def main():
     cleanup_parser.add_argument("--input", "-i", required=True,
                                 help="Path to structured transcription file")
     cleanup_parser.add_argument("--output", "-o", help="Path to save cleaned transcription (optional)")
+
+    # Sub-parser for optimizing segments to sentences
+    optimize_parser = subparsers.add_parser("optimize-segments",
+                                            help="Optimize transcription by breaking segments into sentences")
+    optimize_parser.add_argument("--input", "-i", required=True,
+                                 help="Path to the transcription file with segments and words")
+    optimize_parser.add_argument("--output", "-o",
+                                 help="Path to save the optimized transcription (optional)")
 
     # Sub-parser for the segment translation command
     translate_parser = subparsers.add_parser("translate", help="Translates transcription segments")
@@ -107,7 +116,18 @@ def main():
         return
 
     # Processing the commands
-    if args.command == "transcribe":
+    if args.command == "extract_audio":
+        if not os.path.exists(args.input):
+            print(f"Error: Video file {args.input} not found.")
+        try:
+            result_file = extract_audio(args.input)
+            print(f"Extracting audio from video file completed successfully."
+                  f"The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error during video conversion: {e}")
+            return
+
+    elif args.command == "transcribe":
         if not os.path.exists(args.input):
             print(f"Error: Input file {args.input} not found.")
             return
@@ -118,17 +138,6 @@ def main():
             print(f"Transcription completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during transcription: {e}")
-            return
-
-    elif args.command == "extract_audio":
-        if not os.path.exists(args.input):
-            print(f"Error: Video file {args.input} not found.")
-        try:
-            result_file = extract_audio(args.input)
-            print(f"Extracting audio from video file completed successfully."
-                  f"The result was saved in file: {result_file}")
-        except Exception as e:
-            print(f"Error during video conversion: {e}")
             return
 
     elif args.command == "correct":
@@ -157,6 +166,21 @@ def main():
             print(f"Error cleaning-up: {e}")
             return
 
+    elif args.command == "optimize-segments":
+        if not os.path.exists(args.input):
+            print(f"Error: Transcription file {args.input} not found.")
+            return
+
+        print(f"Optimizing segments in transcription file: {args.input}")
+        try:
+            result_file = optimize_transcription_segments(args.input, args.output)
+            print(f"Segment optimization completed successfully. The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error optimizing segments: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+
     elif args.command == "translate":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
@@ -183,7 +207,6 @@ def main():
         except Exception as e:
             print(f"Error translating segments: {e}")
             return
-
 
     elif args.command == "tts":
         if not os.path.exists(args.input):

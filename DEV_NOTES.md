@@ -1,46 +1,49 @@
 ## Extract audio from video file:
-python3 cli.py extract_audio --input video_input/sample.mp4
+python3 cli.py extract_audio --input video_input/input.mp4
 or
 # for processing all videos in the directory
 python3 cli.py extract_audio --input video_input
 
 ## Timestamped transcription:
-python3 cli.py transcribe --input audio_input/sample.mp3
+python3 cli.py transcribe --input audio_input/input.mp3
 
 ## Timestamped transcription correction:
-python3 cli.py correct --input output/timestamped_transcriptions/sample_timestamped.json
+python3 cli.py correct --input output/timestamped_transcriptions/input_timestamped.json
 
-# First segment start timestamp correction (for W3A only):
-python3 cli.py correct --input output/timestamped_transcriptions/sample_timestamped.json --start_timestamp 4.0
+# First segment start timestamp correction (FOR W3A ONLY):
+python3 cli.py correct --input output/timestamped_transcriptions/input_timestamped.json --start_timestamp 4.0
 
 ## Corrected timestamped transcription cleaning up:
-python3 cli.py cleanup --input output/timestamped_transcriptions/sample_timestamped_corrected.json
+python3 cli.py cleanup --input output/timestamped_transcriptions/input_timestamped_corrected.json
+
+## Transcription segments optimization:
+python3 cli.py optimize-segments --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned.json
 
 ## Translation:
-python3 cli.py translate --input output/timestamped_transcriptions/sample_timestamped_corrected_cleaned.json 
+python3 cli.py translate --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized.json 
 
 ## TTS (text-to-speech):
-python3 cli.py tts --input output/timestamped_transcriptions/sample_timestamped_corrected_cleaned_translated.json
+python3 cli.py tts --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_translated.json
 
 # TTS with determined API:
-python3 cli.py tts --input output/timestamped_transcriptions/sample_timestamped_corrected_cleaned_translated.json --dealer elevenlabs
+python3 cli.py tts --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_translated.json --dealer elevenlabs
 
 # TTS with added intro and outro from resources folder
-python3 cli.py tts --input output/timestamped_transcriptions/sample_timestamped_corrected_cleaned_translated.json --dealer elevenlabs --outro --intro
+python3 cli.py tts --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_translated.json --dealer elevenlabs --outro --intro
 
 
 ## 4-stage (audio extraction, transcription, correction, cleaning-up) pipeline:
 # Process a specific video file
-python3 processing_video_pipeline.py --input video_input/sample.mp4
+python3 processing_video_pipeline.py --input video_input/input.mp4
 
-# Process a specific video with a start offset for intro
-python3 processing_video_pipeline.py --input video_input/sample.mp4 --start_timestamp 4.0
+# Process a specific video with a start offset for intro (FIX IT!)
+python3 processing_video_pipeline.py --input video_input/input.mp4 --start_timestamp 4.0
 
-# WARNING! Process ALL videos in the default input directory with a start timestamp
-python processing_video_pipeline.py --input input_directory --start_timestamp 4.0
+# WARNING! Process ALL videos in the default input directory with a start timestamp (FIX IT!)
+python processing_video_pipeline.py --input video_input --start_timestamp 4.0
 
 # Regenerating segment by id:
-python3 cli.py segment-tts --input output/timestamped_transcriptions/sample_timestamped_corrected_cleaned_translated.json --segment-id 1 --dealer elevenlabs --output custom_segment_1.mp3
+python3 cli.py segment-tts --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_translated.json --segment-id 1 --dealer elevenlabs --output custom_segment_1.mp3
 
 # Replace segment by custom one:
-python3 cli.py replace-segment --main-audio output/timestamped_transcriptions/sample.mp3 --segment-audio custom_segment_1.mp3 --translation output/timestamped_transcriptions/sample_timestamped_corrected_cleaned_translated.json --segment-id 1
+python3 cli.py replace-segment --main-audio output/timestamped_transcriptions/input.mp3 --segment-audio custom_segment_1.mp3 --translation output/timestamped_transcriptions/sample_timestamped_corrected_cleaned_optimized_translated.json --segment-id 1
