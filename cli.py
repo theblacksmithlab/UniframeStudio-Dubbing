@@ -7,9 +7,10 @@ from modules.cleaning_up_corrected_transcirption import cleanup_transcript_segme
 from modules.transcribe_with_timestamps import transcribe_audio_with_timestamps
 from modules.transcription_correction import correct_transcript_segments
 from modules.translation import translate_transcript_segments
-from modules.tts import generate_tts_for_segments
-from modules.tts_correction import regenerate_segment, replace_segment_in_audio
+from modules.tts import generate_tts_for_segments, reassemble_audio_file
+from modules.tts_correction import regenerate_segment
 from modules.video_to_audio_conversion import extract_audio
+from modules.optimized_segmentation import optimize_transcription_segments
 
 
 def main():
@@ -46,6 +47,14 @@ def main():
     cleanup_parser.add_argument("--input", "-i", required=True,
                                 help="Path to structured transcription file")
     cleanup_parser.add_argument("--output", "-o", help="Path to save cleaned transcription (optional)")
+
+    # Sub-parser for optimizing segments to sentences
+    optimize_parser = subparsers.add_parser("optimize-segments",
+                                            help="Optimize transcription by breaking segments into sentences")
+    optimize_parser.add_argument("--input", "-i", required=True,
+                                 help="Path to the transcription file with segments and words")
+    optimize_parser.add_argument("--output", "-o",
+                                 help="Path to save the optimized transcription (optional)")
 
     # Sub-parser for the segment translation command
     translate_parser = subparsers.add_parser("translate", help="Translates transcription segments")
@@ -84,19 +93,17 @@ def main():
     segment_tts_parser.add_argument("--voice", "-v", default="onyx",
                                     help="Voice for dubbing (only used for OpenAI, default: onyx)")
 
-    # Add a new sub-parser for replacing a segment in the main audio
-    replace_segment_parser = subparsers.add_parser("replace-segment",
-                                                   help="Replace a segment in the main audio file with new audio")
-    replace_segment_parser.add_argument("--main-audio", "-m", required=True,
-                                        help="Path to the main audio file")
-    replace_segment_parser.add_argument("--segment-audio", "-s", required=True,
-                                        help="Path to the new segment audio file")
-    replace_segment_parser.add_argument("--translation", "-t", required=True,
-                                        help="Path to the translation file with segment timestamps")
-    replace_segment_parser.add_argument("--segment-id", "-i", required=True, type=int,
-                                        help="ID of the segment to replace")
-    replace_segment_parser.add_argument("--output", "-o",
-                                        help="Path to save the new audio file (optional)")
+    # Add a new sub-parser for reassembling audio from existing segments
+    reassemble_parser = subparsers.add_parser("reassemble",
+                                              help="Reassemble audio file from existing segments")
+    reassemble_parser.add_argument("--input", "-i", required=True,
+                                   help="Path to the translation file with segments")
+    reassemble_parser.add_argument("--output", "-o",
+                                   help="Path to save the reassembled audio file (optional)")
+    reassemble_parser.add_argument("--intro", action="store_true",
+                                   help="Add intro audio at the beginning (replaces first 4 seconds)")
+    reassemble_parser.add_argument("--outro", action="store_true",
+                                   help="Add outro audio after the last segment")
 
     # Parsing arguments
     args = parser.parse_args()
@@ -107,7 +114,18 @@ def main():
         return
 
     # Processing the commands
-    if args.command == "transcribe":
+    if args.command == "extract_audio":
+        if not os.path.exists(args.input):
+            print(f"Error: Video file {args.input} not found.")
+        try:
+            result_file = extract_audio(args.input)
+            print(f"Extracting audio from video file completed successfully."
+                  f"The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error during video conversion: {e}")
+            return
+
+    elif args.command == "transcribe":
         if not os.path.exists(args.input):
             print(f"Error: Input file {args.input} not found.")
             return
@@ -118,17 +136,6 @@ def main():
             print(f"Transcription completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during transcription: {e}")
-            return
-
-    elif args.command == "extract_audio":
-        if not os.path.exists(args.input):
-            print(f"Error: Video file {args.input} not found.")
-        try:
-            result_file = extract_audio(args.input)
-            print(f"Extracting audio from video file completed successfully."
-                  f"The result was saved in file: {result_file}")
-        except Exception as e:
-            print(f"Error during video conversion: {e}")
             return
 
     elif args.command == "correct":
@@ -157,6 +164,21 @@ def main():
             print(f"Error cleaning-up: {e}")
             return
 
+    elif args.command == "optimize-segments":
+        if not os.path.exists(args.input):
+            print(f"Error: Transcription file {args.input} not found.")
+            return
+
+        print(f"Optimizing segments in transcription file: {args.input}")
+        try:
+            result_file = optimize_transcription_segments(args.input, args.output)
+            print(f"Segment optimization completed successfully. The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error optimizing segments: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+
     elif args.command == "translate":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
@@ -183,7 +205,6 @@ def main():
         except Exception as e:
             print(f"Error translating segments: {e}")
             return
-
 
     elif args.command == "tts":
         if not os.path.exists(args.input):
@@ -222,29 +243,21 @@ def main():
             traceback.print_exc()
             return
 
-    # And in the command processing section:
-    elif args.command == "replace-segment":
-        if not os.path.exists(args.main_audio):
-            print(f"Error: Main audio file {args.main_audio} not found.")
+    elif args.command == "reassemble":
+        if not os.path.exists(args.input):
+            print(f"Error: Translation file {args.input} not found.")
             return
 
-        if not os.path.exists(args.segment_audio):
-            print(f"Error: Segment audio file {args.segment_audio} not found.")
-            return
-
-        if not os.path.exists(args.translation):
-            print(f"Error: Translation file {args.translation} not found.")
-            return
-
-        print(f"Replacing segment {args.segment_id} in main audio file: {args.main_audio}")
+        print(f"Reassembling audio from segments using file: {args.input}")
         try:
-            result_file = replace_segment_in_audio(
-                args.main_audio, args.segment_audio, args.translation, args.segment_id, args.output
+            result_file = reassemble_audio_file(
+                args.input, args.output,
+                intro=args.intro, outro=args.outro
             )
             if result_file:
-                print(f"Segment replacement completed successfully. The result was saved in file: {result_file}")
+                print(f"Audio successfully reassembled. The result was saved in file: {result_file}")
         except Exception as e:
-            print(f"Error replacing segment: {e}")
+            print(f"Error reassembling audio: {e}")
             import traceback
             traceback.print_exc()
             return
