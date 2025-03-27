@@ -43,7 +43,7 @@ python3 processing_video_pipeline.py --input video_input/input.mp4 --start_times
 python processing_video_pipeline.py --input video_input --start_timestamp 4.0
 
 # Regenerating segment by id:
-python3 cli.py segment-tts --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_translated.json --segment-id 1 --dealer elevenlabs --output custom_segment_1.mp3
+python3 cli.py segment-tts --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_translated.json --segment-id 1 --dealer elevenlabs --output segment_1.mp3
 
-# Replace segment by custom one:
-python3 cli.py replace-segment --main-audio output/timestamped_transcriptions/input.mp3 --segment-audio custom_segment_1.mp3 --translation output/timestamped_transcriptions/sample_timestamped_corrected_cleaned_optimized_translated.json --segment-id 1
+# Reassemble output audio from prepared segments at output/temp_audio_segments:
+python3 cli.py reassemble --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_translated.json --intro --outro

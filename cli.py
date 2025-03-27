@@ -7,7 +7,7 @@ from modules.cleaning_up_corrected_transcirption import cleanup_transcript_segme
 from modules.transcribe_with_timestamps import transcribe_audio_with_timestamps
 from modules.transcription_correction import correct_transcript_segments
 from modules.translation import translate_transcript_segments
-from modules.tts import generate_tts_for_segments
+from modules.tts import generate_tts_for_segments, reassemble_audio_file
 from modules.tts_correction import regenerate_segment, replace_segment_in_audio
 from modules.video_to_audio_conversion import extract_audio
 from modules.optimized_segmentation import optimize_transcription_segments
@@ -106,6 +106,18 @@ def main():
                                         help="ID of the segment to replace")
     replace_segment_parser.add_argument("--output", "-o",
                                         help="Path to save the new audio file (optional)")
+
+    # Add a new sub-parser for reassembling audio from existing segments
+    reassemble_parser = subparsers.add_parser("reassemble",
+                                              help="Reassemble audio file from existing segments")
+    reassemble_parser.add_argument("--input", "-i", required=True,
+                                   help="Path to the translation file with segments")
+    reassemble_parser.add_argument("--output", "-o",
+                                   help="Path to save the reassembled audio file (optional)")
+    reassemble_parser.add_argument("--intro", action="store_true",
+                                   help="Add intro audio at the beginning (replaces first 4 seconds)")
+    reassemble_parser.add_argument("--outro", action="store_true",
+                                   help="Add outro audio after the last segment")
 
     # Parsing arguments
     args = parser.parse_args()
@@ -268,6 +280,25 @@ def main():
                 print(f"Segment replacement completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error replacing segment: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+
+    elif args.command == "reassemble":
+        if not os.path.exists(args.input):
+            print(f"Error: Translation file {args.input} not found.")
+            return
+
+        print(f"Reassembling audio from segments using file: {args.input}")
+        try:
+            result_file = reassemble_audio_file(
+                args.input, args.output,
+                intro=args.intro, outro=args.outro
+            )
+            if result_file:
+                print(f"Audio successfully reassembled. The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error reassembling audio: {e}")
             import traceback
             traceback.print_exc()
             return
