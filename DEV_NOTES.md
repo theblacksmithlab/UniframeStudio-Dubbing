@@ -5,7 +5,7 @@ or
 python3 cli.py extract_audio --input video_input
 
 ## Timestamped transcription:
-python3 cli.py transcribe --input audio_input/input.mp3
+python3 cli.py transcribe --input audio_input/input.wav
 
 ## Timestamped transcription correction:
 python3 cli.py correct --input output/timestamped_transcriptions/input_timestamped.json
@@ -36,10 +36,10 @@ python3 cli.py tts --input output/timestamped_transcriptions/input_timestamped_c
 # Process a specific video file
 python3 processing_video_pipeline.py --input video_input/input.mp4
 
-# Process a specific video with a start offset for intro (FIX IT!)
+# Process a specific video with a start offset for intro
 python3 processing_video_pipeline.py --input video_input/input.mp4 --start_timestamp 4.0
 
-# WARNING! Process ALL videos in the default input directory with a start timestamp (FIX IT!)
+# WARNING! Process ALL videos in the default input directory with a start timestamp
 python processing_video_pipeline.py --input video_input --start_timestamp 4.0
 
 # Regenerating segment by id:

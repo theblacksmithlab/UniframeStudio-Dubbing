@@ -183,9 +183,6 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
     generated_segments = []
 
-    final_duration_ms = int(segments[-1]["end"] * 1000)
-    final_audio = AudioSegment.silent(duration=final_duration_ms)
-
     for i, segment in enumerate(segments):
         text = segment.get("translated_text", "").strip()
         if not text:
@@ -233,7 +230,7 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
                 request_data = {
                     "text": text,
                     "model_id": "eleven_multilingual_v2",
-                    "output_format": "mp3_44100_192",
+                    "output_format": "pcm_24000",
                     "voice_settings": {
                         "similarity_boost": 1,
                         "stability": 0.75,
@@ -344,8 +341,6 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
                 "end_time_ms": end_time_ms,
                 "file": segment_file
             })
-
-            final_audio = final_audio.overlay(segment_audio, position=start_time_ms)
 
             final_segment_duration = len(segment_audio)
             if abs(final_segment_duration - target_duration_ms) > 100:
