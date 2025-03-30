@@ -28,7 +28,7 @@ def process_single_file(video_path, args):
     print(f"{'=' * 50}")
 
     # Step 1: Extract audio
-    print(f"\n[Step 1/4] Extracting audio from video {video_filename}...")
+    print(f"\n[Step 1/5] Extracting audio from video {video_filename}...")
     extract_cmd = [sys.executable, "cli.py", "extract_audio", "--input", video_path]
     extract_output = run_command(extract_cmd)
 
@@ -50,7 +50,7 @@ def process_single_file(video_path, args):
     print(f"Audio file created: {audio_path}")
 
     # Step 2: Transcription
-    print(f"\n[Step 2/4] Transcribing audio {os.path.basename(audio_path)}...")
+    print(f"\n[Step 2/5] Transcribing audio {os.path.basename(audio_path)}...")
     transcribe_cmd = [sys.executable, "cli.py", "transcribe", "--input", audio_path]
     transcribe_output = run_command(transcribe_cmd)
 
@@ -70,8 +70,7 @@ def process_single_file(video_path, args):
 
     print(f"Transcription file created: {transcription_path}")
 
-    # Step 3: Correct transcription
-    print(f"\n[Step 3/4] Structuring transcription {os.path.basename(transcription_path)}...")
+    print(f"\n[Step 3/5] Structuring transcription {os.path.basename(transcription_path)}...")
     correct_cmd = [sys.executable, "cli.py", "correct", "--input", transcription_path]
 
     if args.start_timestamp is not None:
@@ -93,7 +92,7 @@ def process_single_file(video_path, args):
     print(f"Corrected transcription file created: {corrected_path}")
 
     # Step 4: Clean transcription
-    print(f"\n[Step 4/4] Cleaning transcription {os.path.basename(corrected_path)}...")
+    print(f"\n[Step 4/5] Cleaning transcription {os.path.basename(corrected_path)}...")
     cleanup_cmd = [sys.executable, "cli.py", "cleanup", "--input", corrected_path]
     cleanup_output = run_command(cleanup_cmd)
 
@@ -109,10 +108,27 @@ def process_single_file(video_path, args):
 
     print(f"Cleaned transcription file created: {cleaned_path}")
 
+    # Step 5: Optimize segments
+    print(f"\n[Step 5/5] Optimizing segments in transcription {os.path.basename(cleaned_path)}...")
+    optimize_cmd = [sys.executable, "cli.py", "optimize-segments", "--input", cleaned_path]
+    optimize_output = run_command(optimize_cmd)
+
+    optimized_path = None
+    if optimize_output:
+        match = re.search(r"saved in file: (.*?)$", optimize_output, re.MULTILINE)
+        if match:
+            optimized_path = match.group(1).strip()
+
+    if not optimized_path or not os.path.exists(optimized_path):
+        print(f"Error: Optimized transcription file was not created or not found.")
+        return False
+
+    print(f"Optimized transcription file created: {optimized_path}")
+
     print(f"\nProcessing of file {video_filename} completed successfully!")
-    print(f"Final result saved to {cleaned_path}")
+    print(f"Final result saved to {optimized_path}")
     print(f"To translate, use the command:")
-    print(f"python cli.py translate --input {cleaned_path}")
+    print(f"python cli.py translate --input {optimized_path}")
     return True
 
 

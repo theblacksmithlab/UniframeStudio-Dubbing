@@ -42,6 +42,7 @@ python3 processing_video_pipeline.py --input video_input/input.mp4 --start_times
 # WARNING! Process ALL videos in the default input directory with a start timestamp
 python processing_video_pipeline.py --input video_input --start_timestamp 4.0
 
+
 # Regenerating segment by id:
 python3 cli.py segment-tts --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_translated.json --segment-id 1 --dealer elevenlabs --output segment_1.mp3
 

@@ -82,16 +82,16 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
             request_data = {
                 "text": text,
                 "model_id": "eleven_multilingual_v2",
-                "output_format": "mp3_44100_192",
+                "output_format": "pcm_24000",
                 "voice_settings": {
                     "similarity_boost": 1,
                     "stability": 0.75,
                     "speed": 1,
                     "use_speaker_boost": False
                 },
-                "previous_text": previous_text,
-                "next_text": next_text,
-                "seed": seed_value
+                # "previous_text": previous_text,
+                # "next_text": next_text,
+                # "seed": seed_value
             }
 
             if not hasattr(regenerate_segment, 'segment_request_ids'):
@@ -100,15 +100,15 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
             headers = {"xi-api-key": elevenlabs_api_key}
 
             response = make_api_request_with_retry(
-                f"https://api.elevenlabs.io/v1/text-to-speech/ksNuhhaBnNLdMLz6SavZ/stream",
+                f"https://api.elevenlabs.io/v1/text-to-speech/EVKrGKATG8lLl6rEfeAE/stream",
                 request_data,
                 headers
             )
 
-            current_request_id = response.headers.get("request-id")
-            if current_request_id:
-                regenerate_segment.segment_request_ids[segment_id] = current_request_id
-                print(f"  Got request_id: {current_request_id}")
+            # current_request_id = response.headers.get("request-id")
+            # if current_request_id:
+            #     regenerate_segment.segment_request_ids[segment_id] = current_request_id
+            #     print(f"  Got request_id: {current_request_id}")
 
             with open(test_file, "wb") as f:
                 f.write(response.content)
@@ -120,23 +120,23 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
 
             needed_speed = actual_duration_ms / target_duration_ms
 
-            if abs(needed_speed - 1.0) > 0.15:
-                speed_value = max(0.92, min(1.08, needed_speed))
+            if abs(needed_speed - 1.0) > 0.05:
+                speed_value = max(0.8, min(1.15, needed_speed))
 
                 print(f"  Using ElevenLabs speed control: {speed_value:.2f}")
 
                 request_data["voice_settings"]["speed"] = speed_value
 
                 response = make_api_request_with_retry(
-                    f"https://api.elevenlabs.io/v1/text-to-speech/ksNuhhaBnNLdMLz6SavZ/stream",
+                    f"https://api.elevenlabs.io/v1/text-to-speech/EVKrGKATG8lLl6rEfeAE/stream",
                     request_data,
                     headers
                 )
 
-                new_request_id = response.headers.get("request-id")
-                if new_request_id:
-                    regenerate_segment.segment_request_ids[segment_id] = new_request_id
-                    print(f"  Updated request_id: {new_request_id}")
+                # new_request_id = response.headers.get("request-id")
+                # if new_request_id:
+                #     regenerate_segment.segment_request_ids[segment_id] = new_request_id
+                #     print(f"  Updated request_id: {new_request_id}")
 
                 with open(temp_file, "wb") as f:
                     f.write(response.content)

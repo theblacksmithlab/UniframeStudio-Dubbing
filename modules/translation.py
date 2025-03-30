@@ -26,9 +26,12 @@ def translate_transcript_segments(input_file, output_file=None):
         prev_text = segments[i - 1].get("text", "").strip() if i > 0 else ""
         next_text = segments[i + 1].get("text", "").strip() if i < total_segments - 1 else ""
 
+        duration = segment.get("end", 0) - segment.get("start", 0)
+
         prompt = (f"Текст предыдущего сегмента:"
                   f"{prev_text} (уже переведено, нужен только для понимания контекста)\n"
                   f"Текст текущего сегмента для перевода: {current_text}\n"
+                  f"Длительность сегмента: {duration:.2f} секунд. Переведите так, чтобы английская версия могла быть естественно произнесена за это время или немного дольше (в пределах 5-10%).\n"
                   f"Текст следующего сегмента:"
                   f"{next_text} (нужен только для понимания контекста)")
 
@@ -45,6 +48,8 @@ def translate_transcript_segments(input_file, output_file=None):
             )
 
             translated_text = response.choices[0].message.content.strip()
+
+            # translated_text = translated_text + " <end of the sentence />"
 
             segment["translated_text"] = translated_text
 
