@@ -237,40 +237,40 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
                         "speed": 1,
                         "use_speaker_boost": False
                     },
-                    "previous_text": previous_text,
-                    "next_text": next_text,
-                    "seed": seed_value
+                    # "previous_text": previous_text,
+                    # "next_text": next_text,
+                    # "seed": seed_value
                 }
 
-                if i > 0:
-                    previous_ids = []
-                    if i - 1 in generate_tts_for_segments.segment_request_ids:
-                        previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 1])
-                    if i - 2 in generate_tts_for_segments.segment_request_ids:
-                        previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 2])
-                    if previous_ids:
-                        request_data["previous_request_ids"] = previous_ids[:3]
-
-                    if previous_ids:
-                        print(f"  Using previous request IDs: {previous_ids}")
-                        request_data["previous_request_ids"] = previous_ids[:3]
-                    else:
-                        print("  No previous request IDs available")
+                # if i > 0:
+                #     previous_ids = []
+                #     if i - 1 in generate_tts_for_segments.segment_request_ids:
+                #         previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 1])
+                #     if i - 2 in generate_tts_for_segments.segment_request_ids:
+                #         previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 2])
+                #     if previous_ids:
+                #         request_data["previous_request_ids"] = previous_ids[:3]
+                #
+                #     if previous_ids:
+                #         print(f"  Using previous request IDs: {previous_ids}")
+                #         request_data["previous_request_ids"] = previous_ids[:3]
+                #     else:
+                #         print("  No previous request IDs available")
 
                 headers = {"xi-api-key": elevenlabs_api_key}
 
                 response = make_api_request_with_retry(
-                    f"https://api.elevenlabs.io/v1/text-to-speech/ksNuhhaBnNLdMLz6SavZ/stream",
+                    f"https://api.elevenlabs.io/v1/text-to-speech/EVKrGKATG8lLl6rEfeAE/stream",
                     request_data,
                     headers
                 )
 
-                current_request_id = response.headers.get("request-id")
-                if current_request_id:
-                    generate_tts_for_segments.segment_request_ids[i] = current_request_id
-                    print(f"  Got request_id: {current_request_id}")
-                else:
-                    print("  Warning: No request_id received in response")
+                # current_request_id = response.headers.get("request-id")
+                # if current_request_id:
+                #     generate_tts_for_segments.segment_request_ids[i] = current_request_id
+                #     print(f"  Got request_id: {current_request_id}")
+                # else:
+                #     print("  Warning: No request_id received in response")
 
                 with open(test_file, "wb") as f:
                     f.write(response.content)
@@ -282,23 +282,23 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
                 needed_speed = actual_duration_ms / target_duration_ms
 
-                if abs(needed_speed - 1.0) > 0.15:
-                    speed_value = max(0.92, min(1.08, needed_speed))
+                if abs(needed_speed - 1.0) > 0.05:
+                    speed_value = max(0.8, min(1.15, needed_speed))
 
                     print(f"  Using ElevenLabs speed control: {speed_value:.2f}")
 
                     request_data["voice_settings"]["speed"] = speed_value
 
                     response = make_api_request_with_retry(
-                        f"https://api.elevenlabs.io/v1/text-to-speech/ksNuhhaBnNLdMLz6SavZ/stream",
+                        f"https://api.elevenlabs.io/v1/text-to-speech/EVKrGKATG8lLl6rEfeAE/stream",
                         request_data,
                         headers
                     )
 
-                    new_request_id = response.headers.get("request-id")
-                    if new_request_id:
-                        generate_tts_for_segments.segment_request_ids[i] = new_request_id
-                        print(f"  Updated request_id: {new_request_id}")
+                    # new_request_id = response.headers.get("request-id")
+                    # if new_request_id:
+                    #     generate_tts_for_segments.segment_request_ids[i] = new_request_id
+                    #     print(f"  Updated request_id: {new_request_id}")
 
                     with open(temp_file, "wb") as f:
                         f.write(response.content)
