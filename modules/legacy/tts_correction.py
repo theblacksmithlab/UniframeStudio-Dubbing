@@ -40,6 +40,8 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
     target_duration_ms = end_time_ms - start_time_ms
 
     segment_index = segments.index(target_segment)
+    data["segments"][segment_index]["target_duration"] = target_duration_ms
+
     previous_text = ""
     next_text = ""
 
@@ -48,6 +50,13 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
 
     if segment_index < len(segments) - 1:
         next_text = segments[segment_index + 1].get("translated_text", "").strip()
+
+    previous_ids = []
+    if segment_index > 0:
+        if "request_id" in segments[segment_index - 1]:
+            previous_ids.append(segments[segment_index - 1]["request_id"])
+        if segment_index > 1 and "request_id" in segments[segment_index - 2]:
+            previous_ids.append(segments[segment_index - 2]["request_id"])
 
     if output_audio_file is None:
         base_dir = os.path.dirname(translation_file)
@@ -75,9 +84,8 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
                 f.write(response.content)
 
         elif dealer.lower() == "elevenlabs":
-            test_file = os.path.join(temp_dir, f"test_{segment_id}.mp3")
 
-            seed_value = hash(text) % 4294967295
+            # seed_value = hash(text) % 4294967295
 
             request_data = {
                 "text": text,
@@ -85,14 +93,20 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
                 "output_format": "pcm_24000",
                 "voice_settings": {
                     "similarity_boost": 1,
-                    "stability": 0.75,
-                    "speed": 1,
+                    "stability": 1,
+                    "speed": 0.88,
                     "use_speaker_boost": False
                 },
-                # "previous_text": previous_text,
-                # "next_text": next_text,
+                "previous_text": previous_text,
+                "next_text": next_text,
                 # "seed": seed_value
             }
+
+            if previous_ids:
+                print(f"  Using previous request IDs: {previous_ids}")
+                request_data["previous_request_ids"] = previous_ids[:3]
+            else:
+                print("  No previous request IDs available")
 
             if not hasattr(regenerate_segment, 'segment_request_ids'):
                 regenerate_segment.segment_request_ids = {}
@@ -100,51 +114,27 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
             headers = {"xi-api-key": elevenlabs_api_key}
 
             response = make_api_request_with_retry(
-                f"https://api.elevenlabs.io/v1/text-to-speech/EVKrGKATG8lLl6rEfeAE/stream",
+                f"https://api.elevenlabs.io/v1/text-to-speech/JDgAnGtjhmdCMmtbyRYK/stream",
                 request_data,
                 headers
             )
 
-            # current_request_id = response.headers.get("request-id")
-            # if current_request_id:
-            #     regenerate_segment.segment_request_ids[segment_id] = current_request_id
-            #     print(f"  Got request_id: {current_request_id}")
+            current_request_id = response.headers.get("request-id")
+            if current_request_id:
+                print(f"  Got request_id: {current_request_id}")
+                data["segments"][segment_index]["request_id"] = current_request_id
+                with open(translation_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+            else:
+                print("  Warning: No request_id received in response")
 
-            with open(test_file, "wb") as f:
+            with open(temp_file, "wb") as f:
                 f.write(response.content)
 
-            test_audio = AudioSegment.from_file(test_file)
-            actual_duration_ms = len(test_audio)
+            segment_audio = AudioSegment.from_file(temp_file)
+            actual_duration_ms = len(segment_audio)
 
-            print(f"  Test audio duration: {actual_duration_ms}ms")
-
-            needed_speed = actual_duration_ms / target_duration_ms
-
-            if abs(needed_speed - 1.0) > 0.05:
-                speed_value = max(0.8, min(1.15, needed_speed))
-
-                print(f"  Using ElevenLabs speed control: {speed_value:.2f}")
-
-                request_data["voice_settings"]["speed"] = speed_value
-
-                response = make_api_request_with_retry(
-                    f"https://api.elevenlabs.io/v1/text-to-speech/EVKrGKATG8lLl6rEfeAE/stream",
-                    request_data,
-                    headers
-                )
-
-                # new_request_id = response.headers.get("request-id")
-                # if new_request_id:
-                #     regenerate_segment.segment_request_ids[segment_id] = new_request_id
-                #     print(f"  Updated request_id: {new_request_id}")
-
-                with open(temp_file, "wb") as f:
-                    f.write(response.content)
-
-                os.remove(test_file)
-            else:
-                print(f"  Speed adjustment within 15%, using original generation")
-                os.rename(test_file, temp_file)
+            print(f"  Generated audio duration: {actual_duration_ms}ms")
         else:
             raise ValueError(f"Unknown TTS dealer: {dealer}. Supported options: openai, elevenlabs")
 
@@ -157,15 +147,20 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
             speed_factor = actual_duration_ms / target_duration_ms
             print(f"  Final adjustment - speeding up by factor: {speed_factor:.2f}x")
             segment_audio = speedup_audio_to_target_duration(segment_audio, speed_factor, temp_dir, segment_id)
+
+            data["segments"][segment_index]["speed_up"] = round(speed_factor, 4)
+            if "stretched" in data["segments"][segment_index]:
+                del data["segments"][segment_index]["stretched"]
         elif target_duration_ms > actual_duration_ms > 0:
-            silence_duration_ms = min(200, int(target_duration_ms - actual_duration_ms) // 2)
-            stretch_target_ms = target_duration_ms - silence_duration_ms
+            if target_duration_ms > actual_duration_ms:
+                stretch_factor = target_duration_ms / actual_duration_ms
+                print(f"  Final adjustment - stretching to: {target_duration_ms}ms")
+                segment_audio = stretch_audio_to_target_duration(segment_audio, target_duration_ms, temp_dir,
+                                                                 segment_id)
 
-            if stretch_target_ms > actual_duration_ms:
-                print(f"  Final adjustment - stretching to: {stretch_target_ms}ms")
-                segment_audio = stretch_audio_to_target_duration(segment_audio, stretch_target_ms, temp_dir, segment_id)
-
-            segment_audio = segment_audio + AudioSegment.silent(duration=silence_duration_ms)
+                data["segments"][segment_index]["stretched"] = round(stretch_factor, 4)
+                if "speed_up" in data["segments"][segment_index]:
+                    del data["segments"][segment_index]["speed_up"]
             print(f"  Final segment duration with silence: {len(segment_audio)}ms vs target {target_duration_ms}ms")
 
         segment_audio.export(output_audio_file, format="mp3")
@@ -175,6 +170,9 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
         if abs(final_segment_duration - target_duration_ms) > 100:
             print(
                 f"  WARNING! Final segment duration {final_segment_duration}ms differs from target {target_duration_ms}ms")
+
+        with open(translation_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
     except Exception as e:
         print(f"Error processing segment {segment_id}: {e}")

@@ -3,12 +3,13 @@ import argparse
 import os
 import dotenv
 
+from modules.adjust_timing import adjust_segments_timing
 from modules.cleaning_up_corrected_transcirption import cleanup_transcript_segments
 from modules.transcribe_with_timestamps import transcribe_audio_with_timestamps
 from modules.transcription_correction import correct_transcript_segments
 from modules.translation import translate_transcript_segments
-from modules.tts import generate_tts_for_segments, reassemble_audio_file
-from modules.tts_correction import regenerate_segment
+from modules.tts_experimental import generate_tts_for_segments, reassemble_audio_file
+from modules.tts_correction_experimental import regenerate_segment
 from modules.video_to_audio_conversion import extract_audio
 from modules.optimized_segmentation import optimize_transcription_segments
 
@@ -19,23 +20,23 @@ def main():
     if not os.getenv("OPENAI_API_KEY"):
         print("OPENAI_API_KEY must be set in .env file!")
 
-    # CLI agrs parser initialization
+    # CLI args parser initialization
     parser = argparse.ArgumentParser(description="Smart audio transcription and translation tools")
 
     # Sub-parsers for commands initialization
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
     # Audio extraction sub-parser
-    extract_parser = subparsers.add_parser("extract_audio", help="Extracting audio from video file")
+    extract_parser = subparsers.add_parser("extract_audio", help="Extract audio from video file")
     extract_parser.add_argument("--input", "-i", required=True, help="Input video-file path")
 
     # Transcription command sub-parser
-    transcribe_parser = subparsers.add_parser("transcribe", help="Transcribes audio with timestamps")
+    transcribe_parser = subparsers.add_parser("transcribe", help="Transcribe audio with timestamps")
     transcribe_parser.add_argument("--input", "-i", required=True, help="Input audio-file path")
 
     # Segments correction command sub-parser
-    correct_parser = subparsers.add_parser("correct", help="Structures raw transcription of segments")
-    correct_parser.add_argument("--input", "-i", required=True, help="Path to transcription file")
+    correct_parser = subparsers.add_parser("correct", help="Structure raw transcription")
+    correct_parser.add_argument("--input", "-i", required=True, help="Path to raw transcription file")
     correct_parser.add_argument("--output", "-o",
                                 help="Path to save structured transcription (optional)")
     correct_parser.add_argument("--start_timestamp", "-st", type=float,
@@ -43,23 +44,28 @@ def main():
 
     # Sub-parse for clearing segments command
     cleanup_parser = subparsers.add_parser("cleanup",
-                                           help="Cleans segments (deletes merged and removes extra spaces)")
+                                           help="Clean-up segments (deletes merged and removes extra spaces)")
     cleanup_parser.add_argument("--input", "-i", required=True,
-                                help="Path to structured transcription file")
+                                help="Path to corrected transcription file")
     cleanup_parser.add_argument("--output", "-o", help="Path to save cleaned transcription (optional)")
 
     # Sub-parser for optimizing segments to sentences
     optimize_parser = subparsers.add_parser("optimize-segments",
                                             help="Optimize transcription by breaking segments into sentences")
     optimize_parser.add_argument("--input", "-i", required=True,
-                                 help="Path to the transcription file with segments and words")
+                                 help="Path to the cleaned-up transcription")
     optimize_parser.add_argument("--output", "-o",
                                  help="Path to save the optimized transcription (optional)")
+
+    # Sub-parser for adjusting segments' timing
+    adjust_parser = subparsers.add_parser("adjust_timing",
+                                          help="Adjust segment end times to match next segment start times")
+    adjust_parser.add_argument("--input", "-i", required=True, help="Path to the optimized transcription file")
 
     # Sub-parser for the segment translation command
     translate_parser = subparsers.add_parser("translate", help="Translates transcription segments")
     translate_parser.add_argument("--input", "-i", required=True,
-                                  help="Path to cleaned transcription file")
+                                  help="Path to time-adjusted transcription file")
     translate_parser.add_argument("--output", "-o",
                                   help="Path to save translated transcription (optional)")
     translate_parser.add_argument("--model", "-m", default="gpt-4o-mini",
@@ -97,13 +103,21 @@ def main():
     reassemble_parser = subparsers.add_parser("reassemble",
                                               help="Reassemble audio file from existing segments")
     reassemble_parser.add_argument("--input", "-i", required=True,
-                                   help="Path to the translation file with segments")
+                                   help="Path to translated transcription file")
     reassemble_parser.add_argument("--output", "-o",
                                    help="Path to save the reassembled audio file (optional)")
     reassemble_parser.add_argument("--intro", action="store_true",
                                    help="Add intro audio at the beginning (replaces first 4 seconds)")
     reassemble_parser.add_argument("--outro", action="store_true",
                                    help="Add outro audio after the last segment")
+
+    # Sub-parser for processing input video
+    process_video_parser = subparsers.add_parser("process_video",
+                                                 help="Process video segments according to TTS durations")
+    process_video_parser.add_argument("--input", "-i",
+                                      help="Path to JSON file with translations and TTS durations")
+    process_video_parser.add_argument("--fps25", action="store_true",
+                                      help="Convert final video to 25 fps")
 
     # Parsing arguments
     args = parser.parse_args()
@@ -179,12 +193,25 @@ def main():
             traceback.print_exc()
             return
 
+    elif args.command == "adjust_timing":
+        if not os.path.exists(args.input):
+            print(f"Error: Input JSON file {args.input} not found.")
+            return
+
+        print(f"Adjusting segment timing in file: {args.input}")
+        try:
+            result_file = adjust_segments_timing(args.input)
+            print(f"Timing adjustment completed successfully. The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error during timing adjustment: {e}")
+            return
+
     elif args.command == "translate":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
             return
 
-        print(f"Translating transcription sergments: {args.input}")
+        print(f"Translating transcription segments: {args.input}")
         try:
             import openai
             openai_model = args.model
@@ -224,7 +251,6 @@ def main():
             traceback.print_exc()
             return
 
-    # And in the command processing section:
     elif args.command == "segment-tts":
         if not os.path.exists(args.input):
             print(f"Error: Translated transcription file {args.input} not found.")
@@ -258,6 +284,28 @@ def main():
                 print(f"Audio successfully reassembled. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error reassembling audio: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+
+    elif args.command == "process_video":
+        json_path = args.input
+        if not json_path:
+            json_path = "../output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_adjusted_translated.json"
+
+        if not os.path.exists(json_path):
+            print(f"Error: JSON file {json_path} not found.")
+            return
+
+        print(f"Processing video segments using data from: {json_path}")
+        try:
+            from modules.video_duration_edit import process_video
+            result_file = process_video(json_path, convert_25fps=args.fps25)
+
+            if result_file:
+                print(f"Video processing completed successfully. The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error processing video: {e}")
             import traceback
             traceback.print_exc()
             return

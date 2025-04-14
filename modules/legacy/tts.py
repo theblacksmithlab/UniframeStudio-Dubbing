@@ -192,6 +192,7 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
         start_time_ms = int(segment["start"] * 1000)
         end_time_ms = int(segment["end"] * 1000)
         target_duration_ms = end_time_ms - start_time_ms
+        data["segments"][i]["target_duration"] = target_duration_ms
 
         print(f"Processing segment {i + 1}/{len(segments)}: '{text[:30]}...'")
         print(f"  Start: {segment['start']}s, End: {segment['end']}s, Target Duration: {target_duration_ms}ms")
@@ -223,9 +224,7 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
                 if not hasattr(generate_tts_for_segments, 'segment_request_ids'):
                     generate_tts_for_segments.segment_request_ids = {}
 
-                test_file = os.path.join(temp_dir, f"test_{i}.mp3")
-
-                seed_value = hash(text) % 4294967295
+                # seed_value = hash(text) % 4294967295
 
                 request_data = {
                     "text": text,
@@ -233,121 +232,88 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
                     "output_format": "pcm_24000",
                     "voice_settings": {
                         "similarity_boost": 1,
-                        "stability": 0.75,
-                        "speed": 1,
+                        "stability": 1,
+                        "speed": 0.88,
                         "use_speaker_boost": False
                     },
-                    # "previous_text": previous_text,
-                    # "next_text": next_text,
+                    "previous_text": previous_text,
+                    "next_text": next_text,
                     # "seed": seed_value
                 }
 
-                # if i > 0:
-                #     previous_ids = []
-                #     if i - 1 in generate_tts_for_segments.segment_request_ids:
-                #         previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 1])
-                #     if i - 2 in generate_tts_for_segments.segment_request_ids:
-                #         previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 2])
-                #     if previous_ids:
-                #         request_data["previous_request_ids"] = previous_ids[:3]
-                #
-                #     if previous_ids:
-                #         print(f"  Using previous request IDs: {previous_ids}")
-                #         request_data["previous_request_ids"] = previous_ids[:3]
-                #     else:
-                #         print("  No previous request IDs available")
+                if i > 0:
+                    previous_ids = []
+                    if i - 1 in generate_tts_for_segments.segment_request_ids:
+                        previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 1])
+                    if i - 2 in generate_tts_for_segments.segment_request_ids:
+                        previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 2])
+                    if previous_ids:
+                        request_data["previous_request_ids"] = previous_ids[:3]
+
+                    if previous_ids:
+                        print(f"  Using previous request IDs: {previous_ids}")
+                        request_data["previous_request_ids"] = previous_ids[:3]
+                    else:
+                        print("  No previous request IDs available")
 
                 headers = {"xi-api-key": elevenlabs_api_key}
 
                 response = make_api_request_with_retry(
-                    f"https://api.elevenlabs.io/v1/text-to-speech/EVKrGKATG8lLl6rEfeAE/stream",
+                    f"https://api.elevenlabs.io/v1/text-to-speech/JDgAnGtjhmdCMmtbyRYK/stream",
                     request_data,
                     headers
                 )
 
-                # current_request_id = response.headers.get("request-id")
-                # if current_request_id:
-                #     generate_tts_for_segments.segment_request_ids[i] = current_request_id
-                #     print(f"  Got request_id: {current_request_id}")
-                # else:
-                #     print("  Warning: No request_id received in response")
+                current_request_id = response.headers.get("request-id")
+                if current_request_id:
+                    generate_tts_for_segments.segment_request_ids[i] = current_request_id
+                    print(f"  Got request_id: {current_request_id}")
+                    data["segments"][i]["request_id"] = current_request_id
+                else:
+                    print("  Warning: No request_id received in response")
 
-                with open(test_file, "wb") as f:
+                with open(temp_file, "wb") as f:
                     f.write(response.content)
 
-                test_audio = AudioSegment.from_file(test_file)
-                actual_duration_ms = len(test_audio)
+                segment_audio = AudioSegment.from_file(temp_file)
+                actual_duration_ms = len(segment_audio)
 
-                print(f"  Test audio duration: {actual_duration_ms}ms")
+                print(f"  Generated audio duration: {actual_duration_ms}ms")
 
-                needed_speed = actual_duration_ms / target_duration_ms
+                if actual_duration_ms > target_duration_ms:
+                    speed_factor = actual_duration_ms / target_duration_ms
+                    print(f"  Final adjustment - speeding up by factor: {speed_factor:.2f}x")
+                    segment_audio = speedup_audio_to_target_duration(segment_audio, speed_factor, temp_dir, i)
 
-                if abs(needed_speed - 1.0) > 0.05:
-                    speed_value = max(0.8, min(1.15, needed_speed))
+                    data["segments"][i]["speed_up"] = round(speed_factor, 4)
+                elif target_duration_ms > actual_duration_ms > 0:
+                    if target_duration_ms > actual_duration_ms:
+                        stretch_factor = target_duration_ms / actual_duration_ms
+                        print(f"  Final adjustment - stretching to: {target_duration_ms}ms")
+                        segment_audio = stretch_audio_to_target_duration(segment_audio, target_duration_ms, temp_dir, i)
 
-                    print(f"  Using ElevenLabs speed control: {speed_value:.2f}")
+                        data["segments"][i]["stretched"] = round(stretch_factor, 4)
 
-                    request_data["voice_settings"]["speed"] = speed_value
+                    print(f"  Final segment duration with silence: {len(segment_audio)}ms vs target {target_duration_ms}ms")
 
-                    response = make_api_request_with_retry(
-                        f"https://api.elevenlabs.io/v1/text-to-speech/EVKrGKATG8lLl6rEfeAE/stream",
-                        request_data,
-                        headers
-                    )
+                segment_audio = match_target_amplitude(segment_audio, -16.0)
 
-                    # new_request_id = response.headers.get("request-id")
-                    # if new_request_id:
-                    #     generate_tts_for_segments.segment_request_ids[i] = new_request_id
-                    #     print(f"  Updated request_id: {new_request_id}")
+                segment_audio.export(segment_file, format="mp3", bitrate="192k")
+                print(f"  Saved segment to {segment_file}")
 
-                    with open(temp_file, "wb") as f:
-                        f.write(response.content)
+                generated_segments.append({
+                    "id": i,
+                    "start_time_ms": start_time_ms,
+                    "end_time_ms": end_time_ms,
+                    "file": segment_file
+                })
 
-                    os.remove(test_file)
-                else:
-                    print(f"  Speed adjustment within 8%, using original generation")
-                    os.rename(test_file, temp_file)
-            else:
-                raise ValueError(f"Unknown TTS dealer: {dealer}. Supported options: openai, elevenlabs")
+                final_segment_duration = len(segment_audio)
+                if abs(final_segment_duration - target_duration_ms) > 100:
+                    print(
+                        f"  WARNING! Final segment duration {final_segment_duration}ms differs from target {target_duration_ms}ms")
 
-            segment_audio = AudioSegment.from_file(temp_file)
-            actual_duration_ms = len(segment_audio)
-
-            print(f"  Actual audio duration: {actual_duration_ms}ms")
-
-            if actual_duration_ms > target_duration_ms:
-                speed_factor = actual_duration_ms / target_duration_ms
-                print(f"  Final adjustment - speeding up by factor: {speed_factor:.2f}x")
-                segment_audio = speedup_audio_to_target_duration(segment_audio, speed_factor, temp_dir, i)
-            elif target_duration_ms > actual_duration_ms > 0:
-                silence_duration_ms = min(200, int(target_duration_ms - actual_duration_ms) // 2)
-                stretch_target_ms = target_duration_ms - silence_duration_ms
-
-                if stretch_target_ms > actual_duration_ms:
-                    print(f"  Final adjustment - stretching to: {stretch_target_ms}ms")
-                    segment_audio = stretch_audio_to_target_duration(segment_audio, stretch_target_ms, temp_dir, i)
-
-                segment_audio = segment_audio + AudioSegment.silent(duration=silence_duration_ms)
-                print(f"  Final segment duration with silence: {len(segment_audio)}ms vs target {target_duration_ms}ms")
-
-            segment_audio = match_target_amplitude(segment_audio, -16.0)
-
-            segment_audio.export(segment_file, format="mp3", bitrate="192k")
-            print(f"  Saved segment to {segment_file}")
-
-            generated_segments.append({
-                "id": i,
-                "start_time_ms": start_time_ms,
-                "end_time_ms": end_time_ms,
-                "file": segment_file
-            })
-
-            final_segment_duration = len(segment_audio)
-            if abs(final_segment_duration - target_duration_ms) > 100:
-                print(
-                    f"  WARNING! Final segment duration {final_segment_duration}ms differs from target {target_duration_ms}ms")
-
-            os.remove(temp_file)
+                os.remove(temp_file)
 
         except Exception as e:
             print(f"Error processing segment {i}: {e}")
@@ -359,6 +325,9 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
     assemble_audio_file(generated_segments, output_audio_file, intro, outro)
 
     shutil.rmtree(temp_dir)
+
+    with open(translation_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
     return output_audio_file
 

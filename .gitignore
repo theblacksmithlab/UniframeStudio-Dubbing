@@ -58,3 +58,8 @@ audio_input/
 output/
 video_input/
 *.mp3
+tts_reserve.py
+temp_audio_segments/
+video_segments/
+modules/legacy/
+output_final.mp4
