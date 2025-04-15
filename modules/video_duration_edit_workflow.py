@@ -248,9 +248,27 @@ class VideoProcessor:
             raise
 
     def extract_segments(self):
-        """Извлечение сегментов и промежутков (gaps) из видео"""
+        """Извлечение сегментов и промежутков (gaps) из видео с использованием GPU, если доступен"""
         segments = self.data.get('segments', [])
         video_path = self.converted_video_path
+
+        # Проверяем доступность NVIDIA GPU encoder
+        has_gpu = self._check_gpu_availability()
+
+        if has_gpu:
+            print("Используем NVIDIA GPU для ускорения извлечения сегментов")
+            encoder = 'h264_nvenc'
+            # NVENC не поддерживает yuv444p, используем совместимый формат
+            pixel_format = 'yuv420p'
+            # NVENC не поддерживает crf, используем высокий битрейт
+            quality_params = ['-b:v', '20M']
+            preset = 'slow'  # NVENC использует другие пресеты
+        else:
+            print("GPU не обнаружен или не поддерживается. Используем CPU")
+            encoder = 'libx264'
+            pixel_format = 'yuv444p'
+            quality_params = ['-crf', '0']
+            preset = 'veryslow'
 
         for i, segment in enumerate(segments):
             start = segment['start']
@@ -271,20 +289,40 @@ class VideoProcessor:
             #     output_path
             # ]
 
-            cmd = [
-                'ffmpeg',
-                '-i', video_path,
-                '-ss', str(start),
-                '-to', str(end),
-                '-c:v', 'libx264',
-                '-crf', '0',
-                '-preset', 'veryslow',
-                '-pix_fmt', 'yuv444p',
-                '-an',
-                output_path
-            ]
+            try:
+                cmd = [
+                          'ffmpeg',
+                          '-i', video_path,
+                          '-ss', str(start),
+                          '-to', str(end),
+                          '-c:v', encoder,
+                      ] + quality_params + [
+                          '-preset', preset,
+                          '-pix_fmt', pixel_format,
+                          '-an',
+                          output_path
+                      ]
 
-            subprocess.run(cmd, check=True)
+                self._run_command(cmd)
+
+            except Exception as e:
+                print(f"Ошибка при использовании GPU для сегмента {i}: {e}")
+                if has_gpu:
+                    print("Пробуем извлечь сегмент используя CPU...")
+                    # CPU fallback для извлечения сегмента
+                    fallback_cmd = [
+                        'ffmpeg',
+                        '-i', video_path,
+                        '-ss', str(start),
+                        '-to', str(end),
+                        '-c:v', 'libx264',
+                        '-crf', '0',
+                        '-preset', 'veryslow',
+                        '-pix_fmt', 'yuv444p',
+                        '-an',
+                        output_path
+                    ]
+                    self._run_command(fallback_cmd)
 
             # Проверка на наличие промежутка (gap) перед следующим сегментом
             if i + 1 < len(segments):
@@ -294,19 +332,51 @@ class VideoProcessor:
                     gap_end = next_start
                     gap_path = self.gaps_dir / f"gap_{i:04d}_{i + 1:04d}.mp4"
 
-                    # Извлечение промежутка
-                    cmd = [
-                        'ffmpeg',
-                        '-i', video_path,
-                        '-ss', str(gap_start),
-                        '-to', str(gap_end),
-                        '-c:v', 'libx264',
-                        '-crf', '18',
-                        '-preset', 'veryfast',
-                        '-an',
-                        gap_path
-                    ]
-                    subprocess.run(cmd, check=True)
+                    # Извлечение промежутка (используем более быстрый пресет для промежутков)
+                    try:
+                        if has_gpu:
+                            gap_cmd = [
+                                'ffmpeg',
+                                '-i', video_path,
+                                '-ss', str(gap_start),
+                                '-to', str(gap_end),
+                                '-c:v', encoder,
+                                '-b:v', '10M',  # Меньший битрейт для промежутков
+                                '-preset', 'fast',  # Быстрее для промежутков
+                                '-pix_fmt', pixel_format,
+                                '-an',
+                                gap_path
+                            ]
+                        else:
+                            gap_cmd = [
+                                'ffmpeg',
+                                '-i', video_path,
+                                '-ss', str(gap_start),
+                                '-to', str(gap_end),
+                                '-c:v', 'libx264',
+                                '-crf', '18',  # Менее высокое качество для промежутков
+                                '-preset', 'veryfast',
+                                '-an',
+                                gap_path
+                            ]
+
+                        self._run_command(gap_cmd)
+
+                    except Exception as e:
+                        print(f"Ошибка при извлечении промежутка {i}-{i + 1}: {e}")
+                        # Fallback на CPU для промежутков
+                        fallback_gap_cmd = [
+                            'ffmpeg',
+                            '-i', video_path,
+                            '-ss', str(gap_start),
+                            '-to', str(gap_end),
+                            '-c:v', 'libx264',
+                            '-crf', '18',
+                            '-preset', 'veryfast',
+                            '-an',
+                            gap_path
+                        ]
+                        self._run_command(fallback_gap_cmd)
 
     def process_segments(self):
         """Обработка всех сегментов с изменением их длительности"""
