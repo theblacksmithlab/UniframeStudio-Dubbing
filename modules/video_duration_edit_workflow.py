@@ -309,7 +309,6 @@ class VideoProcessor:
                 print(f"Ошибка при использовании GPU для сегмента {i}: {e}")
                 if has_gpu:
                     print("Пробуем извлечь сегмент используя CPU...")
-                    # CPU fallback для извлечения сегмента
                     fallback_cmd = [
                         'ffmpeg',
                         '-i', video_path,
@@ -324,7 +323,6 @@ class VideoProcessor:
                     ]
                     self._run_command(fallback_cmd)
 
-            # Проверка на наличие промежутка (gap) перед следующим сегментом
             if i + 1 < len(segments):
                 next_start = segments[i + 1]['start']
                 if next_start > end:
@@ -332,7 +330,6 @@ class VideoProcessor:
                     gap_end = next_start
                     gap_path = self.gaps_dir / f"gap_{i:04d}_{i + 1:04d}.mp4"
 
-                    # Извлечение промежутка (используем более быстрый пресет для промежутков)
                     try:
                         if has_gpu:
                             gap_cmd = [
@@ -341,8 +338,8 @@ class VideoProcessor:
                                 '-ss', str(gap_start),
                                 '-to', str(gap_end),
                                 '-c:v', encoder,
-                                '-b:v', '10M',  # Меньший битрейт для промежутков
-                                '-preset', 'fast',  # Быстрее для промежутков
+                                '-b:v', '10M',
+                                '-preset', 'fast',
                                 '-pix_fmt', pixel_format,
                                 '-an',
                                 gap_path
@@ -354,7 +351,7 @@ class VideoProcessor:
                                 '-ss', str(gap_start),
                                 '-to', str(gap_end),
                                 '-c:v', 'libx264',
-                                '-crf', '18',  # Менее высокое качество для промежутков
+                                '-crf', '18',
                                 '-preset', 'veryfast',
                                 '-an',
                                 gap_path
@@ -364,7 +361,6 @@ class VideoProcessor:
 
                     except Exception as e:
                         print(f"Ошибка при извлечении промежутка {i}-{i + 1}: {e}")
-                        # Fallback на CPU для промежутков
                         fallback_gap_cmd = [
                             'ffmpeg',
                             '-i', video_path,
@@ -566,47 +562,100 @@ class VideoProcessor:
         # Шаг 3: Собираем видео из кадров
         print(f"Собираем видео из {frame_count} кадров...")
 
-        # # Faster, but with lower quality
-        # cmd = [
-        #     'ffmpeg',
-        #     '-f', 'concat',
-        #     '-safe', '0',
-        #     '-i', str(frame_list_path),
-        #     '-vsync', 'vfr',
-        #     '-pix_fmt', 'yuv420p',
-        #     '-c:v', 'libx264',
-        #     '-crf', '18',
-        #     '-preset', 'medium',
-        #     '-movflags', '+faststart',
-        #     str(temp_output)
-        # ]
+        has_gpu = self._check_gpu_availability()
 
-        cmd = [
-            'ffmpeg',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', str(frame_list_path),
-            '-vsync', 'vfr',
-            '-pix_fmt', 'yuv444p',
-            '-c:v', 'libx264',
-            '-crf', '0',
-            '-preset', 'veryslow',
-            '-movflags', '+faststart',
-            str(temp_output)
-        ]
+        if has_gpu:
+            print("Используем NVIDIA GPU для финального объединения видео")
+            encoder = 'h264_nvenc'
+            # NVENC не поддерживает yuv444p, используем совместимый формат
+            pixel_format = 'yuv420p'
+            # NVENC не поддерживает crf, используем высокий битрейт
+            quality_params = ['-b:v', '20M']
+            preset = 'slow'  # NVENC использует другие пресеты
 
-        self._run_command(cmd)
-
-        if os.path.exists(temp_output):
-            video_duration = self._get_video_duration(temp_output)
-            print(f"Видео успешно создано! Длительность: {video_duration:.4f} сек")
-
-            shutil.copy(temp_output, self.output_video_path)
-            print(f"Результат сохранен в {self.output_video_path}")
-            return True
+            cmd = [
+                'ffmpeg',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(frame_list_path),
+                '-vsync', 'vfr',
+                '-pix_fmt', pixel_format,
+                '-c:v', encoder,
+                '-b:v', '20M',  # Высокий битрейт для максимального качества
+                '-preset', preset,
+                '-movflags', '+faststart',
+                str(temp_output)
+            ]
         else:
-            print("Ошибка: Не удалось создать итоговое видео!")
-            return False
+            print("GPU не обнаружен или не поддерживается. Используем CPU для максимального качества")
+            # # Faster, but with lower quality
+            # cmd = [
+            #     'ffmpeg',
+            #     '-f', 'concat',
+            #     '-safe', '0',
+            #     '-i', str(frame_list_path),
+            #     '-vsync', 'vfr',
+            #     '-pix_fmt', 'yuv420p',
+            #     '-c:v', 'libx264',
+            #     '-crf', '18',
+            #     '-preset', 'medium',
+            #     '-movflags', '+faststart',
+            #     str(temp_output)
+            # ]
+
+            cmd = [
+                'ffmpeg',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(frame_list_path),
+                '-vsync', 'vfr',
+                '-pix_fmt', 'yuv444p',
+                '-c:v', 'libx264',
+                '-crf', '0',
+                '-preset', 'veryslow',
+                '-movflags', '+faststart',
+                str(temp_output)
+            ]
+
+        try:
+            self._run_command(cmd)
+
+            if not os.path.exists(temp_output) and has_gpu:
+                print("Ошибка при использовании GPU. Пробуем CPU...")
+                # Fallback на CPU
+                cmd = [
+                    'ffmpeg',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', str(frame_list_path),
+                    '-vsync', 'vfr',
+                    '-pix_fmt', 'yuv444p',
+                    '-c:v', 'libx264',
+                    '-crf', '0',
+                    '-preset', 'veryslow',
+                    '-movflags', '+faststart',
+                    str(temp_output)
+                ]
+                self._run_command(cmd)
+        except Exception as e:
+            print(f"Ошибка при объединении видео: {e}")
+            if has_gpu:
+                print("Пробуем CPU для финального объединения...")
+                # Fallback на CPU
+                cmd = [
+                    'ffmpeg',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', str(frame_list_path),
+                    '-vsync', 'vfr',
+                    '-pix_fmt', 'yuv444p',
+                    '-c:v', 'libx264',
+                    '-crf', '0',
+                    '-preset', 'veryslow',
+                    '-movflags', '+faststart',
+                    str(temp_output)
+                ]
+                self._run_command(cmd)
 
     def cleanup(self):
         """Очистка временных файлов"""
