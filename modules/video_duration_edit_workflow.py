@@ -8,14 +8,15 @@ import shutil
 class VideoProcessor:
     def __init__(self, input_video_path, json_path, output_video_path, intro_outro_path, target_fps=25):
         """
-        Инициализация процессора видео
+        Video Processor initialization
 
-        :param input_video_path: Путь к исходному видео
-        :param json_path: Путь к JSON-файлу с сегментами
-        :param output_video_path: Путь для сохранения результата
-        :param intro_outro_path: Путь к файлу с интро/аутро
-        :param target_fps: Целевой FPS (по умолчанию 25)
+        :param input_video_path: Path to original video file
+        :param json_path: Path to segments' info JSON-file
+        :param output_video_path: Output file path
+        :param intro_outro_path: Path to intro/outro file
+        :param target_fps: Target FPS (25 by default)
         """
+        self._gpu_available = None
         self.input_video_path = input_video_path
         self.json_path = json_path
         self.output_video_path = output_video_path
@@ -41,36 +42,36 @@ class VideoProcessor:
         self.converted_video_path = self.temp_dir / "converted_input.mp4"
 
     def _run_command(self, cmd, **kwargs):
-        """Безопасное выполнение внешней команды с выводом журнала"""
+        """Safely execute external command with log output"""
         try:
-            print(f"Выполнение команды: {' '.join(map(str, cmd))}")
+            print(f"Executing a command: {' '.join(map(str, cmd))}")
             result = subprocess.run(cmd, capture_output=True, text=True, **kwargs)
 
             if result.returncode != 0:
-                print(f"Ошибка при выполнении команды. Код возврата: {result.returncode}")
-                print(f"Стандартный вывод: {result.stdout}")
-                print(f"Вывод ошибок: {result.stderr}")
+                print(f"Error executing command. Return code: {result.returncode}")
+                print(f"Standard output: {result.stdout}")
+                print(f"Error output: {result.stderr}")
                 raise subprocess.CalledProcessError(result.returncode, cmd,
                                                     result.stdout, result.stderr)
             return result
         except Exception as e:
-            print(f"Исключение при выполнении команды: {e}")
+            print(f"Exception while executing command: {e}")
             raise
 
     def _check_gpu_availability(self):
-        """Проверяет доступность NVIDIA GPU для кодирования видео"""
-        # Если мы уже проверяли и знаем результат, используем его
+        """Checks for NVIDIA GPU availability for video encoding"""
+        # If we've already checked and have the result, use it
         if hasattr(self, '_gpu_available'):
             return self._gpu_available
 
         try:
-            # Запускаем FFmpeg с запросом доступных кодеков
+            # Run FFmpeg to list available encoders
             cmd = ['ffmpeg', '-encoders']
             result = subprocess.run(cmd, capture_output=True, text=True)
 
-            # Проверяем наличие h264_nvenc среди доступных кодеков
+            # Check if h264_nvenc is among available encoders
             if 'h264_nvenc' in result.stdout:
-                # Пытаемся выполнить тестовое кодирование
+                # Try a test encoding
                 test_cmd = [
                     'ffmpeg',
                     '-f', 'lavfi',
@@ -81,21 +82,21 @@ class VideoProcessor:
                 ]
                 test_result = subprocess.run(test_cmd, capture_output=True, text=True)
 
-                # Если тест прошел без ошибок, значит GPU доступен
+                # If the test succeeded without errors, GPU is available
                 if test_result.returncode == 0:
                     self._gpu_available = True
                     return True
 
-            # Если мы здесь, значит GPU недоступен или не поддерживается
+            # If we're here, the GPU is unavailable or unsupported
             self._gpu_available = False
             return False
         except Exception as e:
-            print(f"Ошибка при проверке GPU: {e}")
+            print(f"Error checking GPU availability: {e}")
             self._gpu_available = False
             return False
 
     def _get_video_fps(self, video_path):
-        """Получение FPS видео"""
+        """Retrieve video FPS"""
         try:
             cmd = [
                 'ffprobe',
@@ -109,37 +110,37 @@ class VideoProcessor:
             data = json.loads(result.stdout)
 
             if not data.get('streams') or len(data['streams']) == 0:
-                raise ValueError(f"Не удалось получить информацию о потоке: {result.stdout}")
+                raise ValueError(f"Failed to get stream information: {result.stdout}")
 
             fps_str = data['streams'][0]['r_frame_rate']
             numerator, denominator = map(int, fps_str.split('/'))
             return numerator / denominator
         except Exception as e:
-            print(f"Ошибка при получении FPS: {e}")
-            # Возвращаем значение по умолчанию в случае ошибки
-            print(f"Используем значение FPS по умолчанию: 25")
+            print(f"Error while getting FPS: {e}")
+            # Return default value in case of error
+            print(f"Using default FPS value: 25")
             return 25.0
 
     def _get_video_duration(self, video_path):
-        """Получение длительности видео в секундах"""
+        """Retrieve video duration in seconds"""
         try:
             cmd = [
                 'ffprobe',
                 '-v', 'error',
                 '-show_entries', 'format=duration',
                 '-of', 'json',
-                str(video_path)  # Преобразуем в строку для безопасности
+                str(video_path)  # Convert to string for safety
             ]
             result = self._run_command(cmd)
             data = json.loads(result.stdout)
 
             if not data.get('format') or 'duration' not in data['format']:
-                raise ValueError(f"Не удалось получить информацию о длительности: {result.stdout}")
+                raise ValueError(f"Failed to get duration info: {result.stdout}")
 
             return float(data['format']['duration'])
         except Exception as e:
-            print(f"Ошибка при получении длительности: {e}")
-            # В случае ошибки попробуем альтернативный метод
+            print(f"Error while getting duration: {e}")
+            # In case of error, try alternative method
             try:
                 cmd = [
                     'ffprobe',
@@ -152,7 +153,7 @@ class VideoProcessor:
                 result = self._run_command(cmd)
                 time_str = result.stdout.strip()
 
-                # Разбор времени в формате HH:MM:SS.MS
+                # Parse time in HH:MM:SS.MS format
                 if ':' in time_str:
                     parts = time_str.split(':')
                     if len(parts) == 3:
@@ -160,21 +161,21 @@ class VideoProcessor:
                         seconds = float(seconds)
                         return float(hours) * 3600 + float(minutes) * 60 + seconds
 
-                # Если не удалось разобрать, просто преобразуем в число
+                # If parsing fails, try converting to float directly
                 return float(time_str)
             except Exception as e2:
-                print(f"Альтернативный метод получения длительности также не удался: {e2}")
-                # Возвращаем предполагаемое значение
+                print(f"Alternative method of getting duration also failed: {e2}")
+                # Return assumed value
                 return 0.0
 
     def _adjust_duration_for_fps(self, duration):
-        """Регулировка длительности для соответствия кадровой частоте"""
+        """Adjust duration to match the target frame rate"""
         frame_duration = 1.0 / self.target_fps
         frames = round(duration / frame_duration)
         return frames * frame_duration
 
     def convert_to_target_fps(self):
-        """Конвертация исходного видео в целевой FPS без звука"""
+        """Convert source video to target FPS without sound"""
         try:
             input_path = str(self.input_video_path)
             output_path = str(self.converted_video_path)
@@ -182,27 +183,27 @@ class VideoProcessor:
             has_gpu = self._check_gpu_availability()
 
             if has_gpu:
-                print("Используем NVIDIA GPU для ускорения конвертации")
+                print("Using NVIDIA GPU to speed up conversion")
                 encoder = 'h264_nvenc'
-                # NVENC не поддерживает yuv444p, используем совместимый формат
+                # NVENC does not support yuv444p, use compatible format
                 pixel_format = 'yuv420p'
-                # NVENC не поддерживает crf, используем высокий битрейт
+                # NVENC does not support crf, use high bitrate
                 quality_params = ['-b:v', '20M']
-                preset = 'slow'  # NVENC использует другие пресеты
+                preset = 'slow'  # NVENC uses other presets
             else:
-                print("GPU не обнаружен или не поддерживается. Используем CPU")
+                print("GPU not detected or not supported. Using CPU")
                 encoder = 'libx264'
                 pixel_format = 'yuv444p'
                 quality_params = ['-crf', '0']
                 preset = 'veryslow'
 
             if not self.needs_fps_conversion:
-                print(f"Исходное видео уже имеет нужную частоту кадров ({self.target_fps} FPS)")
-                # Копируем оригинал, но удаляем аудио
+                print(f"The original video already has the required frame rate ({self.target_fps} FPS)")
+                # Copy the original but delete the audio
                 cmd = [
                           'ffmpeg',
                           '-i', input_path,
-                          '-an',  # Удаление аудио
+                          '-an',
                           '-c:v', encoder,
                       ] + quality_params + [
                           '-preset', preset,
@@ -210,11 +211,11 @@ class VideoProcessor:
                           output_path
                       ]
             else:
-                print(f"Конвертация видео из {self.input_fps} FPS в {self.target_fps} FPS")
+                print(f"Convert video from {self.input_fps} FPS to {self.target_fps} FPS")
                 cmd = [
                           'ffmpeg',
                           '-i', input_path,
-                          '-an',  # Удаление аудио
+                          '-an',
                           '-c:v', encoder,
                       ] + quality_params + [
                           '-preset', preset,
@@ -226,45 +227,44 @@ class VideoProcessor:
             self._run_command(cmd)
 
             if not os.path.exists(output_path):
-                raise FileNotFoundError(f"Конвертированный файл не был создан: {output_path}")
+                raise FileNotFoundError(f"The converted file was not created: {output_path}")
 
             actual_fps = self._get_video_fps(output_path)
-            print(f"Проверка FPS конвертированного файла: {actual_fps}")
+            print(f"Checking the FPS of the converted file: {actual_fps}")
 
             if abs(actual_fps - self.target_fps) > 0.1:
                 print(
-                    f"Предупреждение: FPS конвертированного файла ({actual_fps}) отличается от целевого ({self.target_fps})")
+                    f"Warning: FPS of converted file ({actual_fps}) is different from target ({self.target_fps})")
 
             return output_path
         except Exception as e:
-            print(f"Ошибка при конвертации видео: {e}")
-            # Если ошибка связана с GPU, пробуем fallback на CPU
+            print(f"Error converting video: {e}")
+            # If the error is related to the GPU, try to fallback to the CPU
             if has_gpu and ("NVENC" in str(e) or "GPU" in str(e) or "nvenc" in str(e)):
-                print("Ошибка при использовании GPU. Пробуем конвертацию на CPU...")
-                # Устанавливаем флаг, что GPU недоступен
+                print("Error using GPU. Trying conversion on CPU...")
+                # Set the flag that the GPU is unavailable
                 self._gpu_available = False
-                # Рекурсивно вызываем ту же функцию, которая теперь будет использовать CPU
+                # Recursively call the same function, which will now use the CPU
                 return self.convert_to_target_fps()
             raise
 
     def extract_segments(self):
-        """Извлечение сегментов и промежутков (gaps) из видео с использованием GPU, если доступен"""
+        """Extract segments and gaps from video using GPU if available"""
         segments = self.data.get('segments', [])
         video_path = self.converted_video_path
 
-        # Проверяем доступность NVIDIA GPU encoder
         has_gpu = self._check_gpu_availability()
 
         if has_gpu:
-            print("Используем NVIDIA GPU для ускорения извлечения сегментов")
+            print("Using NVIDIA GPU to speed up segment extraction")
             encoder = 'h264_nvenc'
-            # NVENC не поддерживает yuv444p, используем совместимый формат
+            # NVENC does not support yuv444p, use a compatible format
             pixel_format = 'yuv420p'
-            # NVENC не поддерживает crf, используем высокий битрейт
+            # NVENC does not support crf, use high bitrate
             quality_params = ['-b:v', '20M']
-            preset = 'slow'  # NVENC использует другие пресеты
+            preset = 'slow' # NVENC uses other presets
         else:
-            print("GPU не обнаружен или не поддерживается. Используем CPU")
+            print("GPU not detected or not supported. Using CPU")
             encoder = 'libx264'
             pixel_format = 'yuv444p'
             quality_params = ['-crf', '0']
@@ -275,7 +275,7 @@ class VideoProcessor:
             end = segment['end']
             output_path = self.segments_dir / f"segment_{i:04d}.mp4"
 
-            # Извлечение сегмента
+            # Segment extracting
             # # Faster, but with lower quality
             # cmd = [
             #     'ffmpeg',
@@ -306,9 +306,9 @@ class VideoProcessor:
                 self._run_command(cmd)
 
             except Exception as e:
-                print(f"Ошибка при использовании GPU для сегмента {i}: {e}")
+                print(f"Error using GPU for segment {i}: {e}")
                 if has_gpu:
-                    print("Пробуем извлечь сегмент используя CPU...")
+                    print("Trying to extract the segment using CPU...")
                     fallback_cmd = [
                         'ffmpeg',
                         '-i', video_path,
@@ -360,7 +360,7 @@ class VideoProcessor:
                         self._run_command(gap_cmd)
 
                     except Exception as e:
-                        print(f"Ошибка при извлечении промежутка {i}-{i + 1}: {e}")
+                        print(f"Error while extracting gap {i}-{i + 1}: {e}")
                         fallback_gap_cmd = [
                             'ffmpeg',
                             '-i', video_path,
@@ -375,7 +375,7 @@ class VideoProcessor:
                         self._run_command(fallback_gap_cmd)
 
     def process_segments(self):
-        """Обработка всех сегментов с изменением их длительности"""
+        """Processing all segments with changes in their duration"""
         segments = self.data.get('segments', [])
 
         for i, segment in enumerate(segments):
@@ -383,43 +383,41 @@ class VideoProcessor:
                 input_path = self.segments_dir / f"segment_{i:04d}.mp4"
                 output_path = self.processed_segments_dir / f"processed_segment_{i:04d}.mp4"
 
-                # Проверка существования входного файла
                 if not os.path.exists(input_path):
-                    print(f"Предупреждение: Файл сегмента не найден: {input_path}")
+                    print(f"Warning: Segment file not found: {input_path}")
                     continue
 
-                # Получение оригинальной длительности из JSON и корректировка tts_duration
+                # Getting original duration from JSON and adjusting tts_duration
                 original_duration = self._get_video_duration(input_path)
                 target_duration = segment['tts_duration']
                 adjusted_target_duration = self._adjust_duration_for_fps(target_duration)
 
-                # Проверка на отрицательную или нулевую длительность
+                # Check for negative or zero duration
                 if original_duration <= 0:
-                    print(f"Ошибка: Оригинальная длительность сегмента {i} равна или меньше нуля: {original_duration}")
+                    print(f"Error: Original duration of segment {i} is equal to or less than zero: {original_duration}")
                     continue
 
                 if adjusted_target_duration <= 0:
                     print(
-                        f"Ошибка: Целевая длительность сегмента {i} равна или меньше нуля: {adjusted_target_duration}")
+                        f"Error: Target duration of segment {i} is equal to or less than zero: {adjusted_target_duration}")
                     continue
 
-                # Если исходная длительность примерно равна целевой, просто копируем файл
-                if abs(original_duration - adjusted_target_duration) < 0.04:  # Разница меньше 1 кадра
-                    print(f"  Незначительное изменение длительности. Копирование файла.")
+                # If the original duration is approximately equal to the target, simply copy the file
+                if abs(original_duration - adjusted_target_duration) < 0.04:  # Difference less than 1 frame
+                    print(f"Minor change in duration. Copying file.")
                     shutil.copy(str(input_path), str(output_path))
                     actual_duration = self._get_video_duration(output_path)
                 else:
-                    # Используем прямой метод с установкой точной длительности для всех сегментов
-                    print(f"  Установка точной длительности для сегмента {i}...")
+                    # We use the direct method with setting the exact duration for all segments
+                    print(f"Set exact duration for segment {i}...")
                     speed_factor = adjusted_target_duration / original_duration
 
-                    # Используем комбинацию изменения скорости и точной длительности для лучшего качества
+                    # Use a combination of speed change and precise duration for better quality
                     # # Faster, but with lower quality
                     # cmd = [
                     #     'ffmpeg',
                     #     '-i', str(input_path),
                     #     '-filter:v', f'setpts={speed_factor}*PTS,fps={self.target_fps}',
-                    #     # Изменяем скорость и гарантируем точный FPS
                     #     '-r', str(self.target_fps),
                     #     '-c:v', 'libx264',
                     #     '-crf', '18',
@@ -445,107 +443,103 @@ class VideoProcessor:
 
                     self._run_command(cmd)
 
-                    # Проверка, что файл был создан
+                    # Check that the file was created
                     if not os.path.exists(output_path):
-                        print(f"Ошибка: Обработанный файл не был создан: {output_path}")
+                        print(f"Error: The processed file was not created: {output_path}")
                         continue
 
                     actual_duration = self._get_video_duration(output_path)
 
-                # Вывод информации о результатах
                 duration_diff = abs(actual_duration - adjusted_target_duration)
 
-                print(f"Сегмент {i}: исходная длительность = {original_duration:.4f} сек, "
-                      f"целевая = {adjusted_target_duration:.4f} сек (tts = {target_duration:.4f} сек), "
-                      f"фактическая = {actual_duration:.4f} сек, "
-                      f"коэффициент скорости = {adjusted_target_duration / original_duration:.4f}")
+                print(f"Segment {i}: original duration = {original_duration:.4f} sec, "
+                      f"target = {adjusted_target_duration:.4f} sec (tts = {target_duration:.4f} sec), "
+                      f"actual = {actual_duration:.4f} sec, "
+                      f"speed coefficient = {adjusted_target_duration / original_duration:.4f}")
 
-                if duration_diff > 0.04:  # Если отклонение больше 1 кадра
-                    print(f"  Предупреждение: Отклонение от целевой длительности: {duration_diff:.4f} сек")
+                if duration_diff > 0.04:  # If the deviation is more than 1 frame
+                    print(f"Warning: Deviation from target duration: {duration_diff:.4f} sec")
 
             except Exception as e:
-                print(f"Ошибка при обработке сегмента {i}: {e}")
-                # Продолжаем со следующим сегментом вместо полной остановки
+                print(f"Error processing segment {i}: {e}")
+                # Continue with the next segment instead of stopping completely
 
     def combine_final_video_reliable(self):
-        """Надежный метод объединения видео через промежуточные изображения"""
+        """A Robust Method for Combining Videos via Intermediate Images"""
         segments = self.data.get('segments', [])
         frames_dir = self.temp_dir / "frames"
         frames_dir.mkdir(exist_ok=True)
 
-        # Временный путь для выходного файла
+        # Temporary path for output file
         temp_output = self.temp_dir / "temp_output.mp4"
 
-        print("Применение надежного метода конкатенации видео...")
-        print("Этот метод займет больше времени, но гарантирует отсутствие артефактов")
-
-        # Шаг 1: Получаем список всех входных файлов в правильном порядке
+        # Step 1: Get a list of all input files in the correct order
         input_files = []
 
-        # Добавляем интро
+        # Adding an intro
         input_files.append((str(self.intro_outro_path), "intro"))
 
-        # Добавляем сегменты и промежутки
+        # Add segments and gaps
         for i in range(len(segments)):
-            # Добавляем обработанный сегмент
+            # Add the processed segment
             segment_path = self.processed_segments_dir / f"processed_segment_{i:04d}.mp4"
             if os.path.exists(segment_path):
                 input_files.append((str(segment_path), f"segment_{i:04d}"))
             else:
-                print(f"Предупреждение: Обработанный сегмент не найден: {segment_path}")
+                print(f"Warning: Processed segment not found: {segment_path}")
 
-            # Проверка на наличие промежутка (gap) после сегмента
+            # Check for a gap after a segment
             gap_path = self.gaps_dir / f"gap_{i:04d}_{i + 1:04d}.mp4"
             if gap_path.exists():
                 input_files.append((str(gap_path), f"gap_{i:04d}_{i + 1:04d}"))
 
-        # Добавляем аутро
+        # Adding an outro
         input_files.append((str(self.intro_outro_path), "outro"))
 
-        print(f"Всего файлов для объединения: {len(input_files)}")
+        print(f"Total files to merge: {len(input_files)}")
 
-        # Шаг 2: Создаем файл списка для прямого объединения кадров
+        # Step 2: Create a list file for direct frame merging
         frame_list_path = self.temp_dir / "frame_list.txt"
         frame_count = 0
         last_frame = None
 
         with open(frame_list_path, 'w') as frame_list:
             for idx, (file_path, file_id) in enumerate(input_files):
-                print(f"Обработка файла {idx + 1}/{len(input_files)}: {file_id}")
+                print(f"Processing file {idx + 1}/{len(input_files)}: {file_id}")
 
-                # Проверяем длительность и fps файла
+                # Check the duration and fps of the file
                 try:
-                    # Получаем информацию о файле
+                    # Getting an info about the file
                     file_fps = self._get_video_fps(file_path)
                     file_duration = self._get_video_duration(file_path)
                     frame_count_in_file = int(file_duration * self.target_fps)
 
                     print(
-                        f"  Длительность: {file_duration:.4f} сек, FPS: {file_fps}, примерное количество кадров: {frame_count_in_file}")
+                        f"Duration: {file_duration:.4f} sec, FPS: {file_fps}, approximate number of frames: {frame_count_in_file}")
 
-                    # Извлекаем каждый кадр из файла
+                    # Extract each frame from the file
                     output_pattern = frames_dir / f"{file_id}_%05d.png"
 
                     cmd = [
                         'ffmpeg',
                         '-i', file_path,
                         '-vf', f'fps={self.target_fps}',
-                        '-q:v', '1',  # Максимальное качество
+                        '-q:v', '1',
                         str(output_pattern)
                     ]
 
                     self._run_command(cmd)
 
-                    # Находим все извлеченные кадры и добавляем их в список
+                    # Find all the extracted frames and add them to the list
                     extracted_frames = sorted(list(frames_dir.glob(f"{file_id}_*.png")))
 
                     if not extracted_frames:
-                        print(f"  Предупреждение: Кадры не были извлечены из {file_id}")
+                        print(f"Warning: No footage was extracted from {file_id}")
                         continue
 
-                    print(f"  Извлечено кадров: {len(extracted_frames)}")
+                    print(f"Frames extracted: {len(extracted_frames)}")
 
-                    # Добавляем кадры в список
+                    # Add frames to the list
                     for frame_path in extracted_frames:
                         frame_list.write(f"file '{frame_path}'\n")
                         frame_list.write(f"duration {1.0 / self.target_fps}\n")
@@ -553,25 +547,25 @@ class VideoProcessor:
                         last_frame = frame_path
 
                 except Exception as e:
-                    print(f"  Ошибка при обработке файла {file_id}: {e}")
+                    print(f"Error processing file {file_id}: {e}")
 
-            # Добавляем последний кадр без длительности (требование FFmpeg)
+            # Add the last frame without duration (FFmpeg requirement)
             if last_frame:
                 frame_list.write(f"file '{last_frame}'\n")
 
-        # Шаг 3: Собираем видео из кадров
-        print(f"Собираем видео из {frame_count} кадров...")
+        # Step 3: Assemble the video from the frames
+        print(f"Assembling video from {frame_count} frames...")
 
         has_gpu = self._check_gpu_availability()
 
         if has_gpu:
-            print("Используем NVIDIA GPU для финального объединения видео")
+            print("Using NVIDIA GPU for final video merging")
             encoder = 'h264_nvenc'
-            # NVENC не поддерживает yuv444p, используем совместимый формат
+            # NVENC does not support yuv444p, use a compatible format
             pixel_format = 'yuv420p'
-            # NVENC не поддерживает crf, используем высокий битрейт
+            # NVENC does not support crf, use high bitrate
             quality_params = ['-b:v', '20M']
-            preset = 'slow'  # NVENC использует другие пресеты
+            preset = 'slow'  # NVENC uses other presets
 
             cmd = [
                 'ffmpeg',
@@ -581,13 +575,13 @@ class VideoProcessor:
                 '-vsync', 'vfr',
                 '-pix_fmt', pixel_format,
                 '-c:v', encoder,
-                '-b:v', '20M',  # Высокий битрейт для максимального качества
+                '-b:v', '20M',
                 '-preset', preset,
                 '-movflags', '+faststart',
                 str(temp_output)
             ]
         else:
-            print("GPU не обнаружен или не поддерживается. Используем CPU для максимального качества")
+            print("GPU not detected or not supported. Using CPU for maximum quality")
             # # Faster, but with lower quality
             # cmd = [
             #     'ffmpeg',
@@ -621,8 +615,8 @@ class VideoProcessor:
             self._run_command(cmd)
 
             if not os.path.exists(temp_output) and has_gpu:
-                print("Ошибка при использовании GPU. Пробуем CPU...")
-                # Fallback на CPU
+                print("Error using GPU. Trying CPU...")
+                # CPU fallback
                 cmd = [
                     'ffmpeg',
                     '-f', 'concat',
@@ -638,10 +632,10 @@ class VideoProcessor:
                 ]
                 self._run_command(cmd)
         except Exception as e:
-            print(f"Ошибка при объединении видео: {e}")
+            print(f"Error merging video: {e}")
             if has_gpu:
-                print("Пробуем CPU для финального объединения...")
-                # Fallback на CPU
+                print("Trying CPU for final merge...")
+                # CPU Fallback
                 cmd = [
                     'ffmpeg',
                     '-f', 'concat',
@@ -658,35 +652,35 @@ class VideoProcessor:
                 self._run_command(cmd)
 
     def cleanup(self):
-        """Очистка временных файлов"""
+        """Deleting temp files"""
         try:
             shutil.rmtree(self.temp_dir)
-            print(f"Временные файлы удалены: {self.temp_dir}")
+            print(f"Temporary files have been deleted: {self.temp_dir}")
         except Exception as e:
-            print(f"Ошибка при удалении временных файлов: {e}")
+            print(f"Error deleting temporary files: {e}")
 
     def process(self):
-        """Выполнение полной последовательности обработки"""
+        """Executing the complete processing sequence"""
         try:
-            print("1. Конвертация видео в целевой FPS...")
+            print("1. Convert video to target FPS...")
             self.convert_to_target_fps()
 
-            print("2. Извлечение сегментов и промежутков...")
+            print("2. Extracting segments and gaps...")
             self.extract_segments()
 
-            print("3. Обработка сегментов с изменением длительности...")
+            print("3. Processing segments with changing duration...")
             self.process_segments()
 
-            print("4. Объединение финального видео надежным методом...")
+            print("4. Merging the final video with a reliable method...")
             self.combine_final_video_reliable()
 
-            print(f"Готово! Результат сохранен в {self.output_video_path}")
+            print(f"Done! The result is saved in {self.output_video_path}")
 
             self.cleanup()
 
             return True
         except Exception as e:
-            print(f"Ошибка при обработке: {e}")
+            print(f"Processing error: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -705,32 +699,32 @@ def main():
 
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"Рабочая директория: {current_dir}")
-    print(f"Директория с входными файлами: {input_dir}")
-    print(f"Директория с ресурсами: {resources_dir}")
+    print(f"Work dir: {current_dir}")
+    print(f"Input file dir: {input_dir}")
+    print(f"Resources dir: {resources_dir}")
 
     if not os.path.exists(input_video):
-        print(f"Ошибка: Входное видео не найдено: {input_video}")
+        print(f"Error: Input video not found: {input_video}")
         return
 
     if not os.path.exists(json_file):
-        print(f"Ошибка: JSON-файл не найден: {json_file}")
+        print(f"Error: JSON-file not found: {json_file}")
         return
 
     if not os.path.exists(intro_outro):
-        print(f"Ошибка: Файл интро/аутро не найден: {intro_outro}")
-        print(f"Проверка содержимого директории ресурсов:")
+        print(f"Error: Intro/outro file not found: {intro_outro}")
+        print(f"Checking the contents of the resource directory:")
         try:
             for file in os.listdir(resources_dir):
                 print(f"  - {file}")
         except Exception as e:
-            print(f"  Ошибка при чтении директории: {e}")
+            print(f"Error reading directory: {e}")
         return
 
-    print(f"Все необходимые файлы найдены:")
-    print(f"  - Входное видео: {input_video}")
-    print(f"  - JSON-файл: {json_file}")
-    print(f"  - Интро/аутро: {intro_outro}")
+    print(f"All necessary files found:")
+    print(f"  - Input video: {input_video}")
+    print(f"  - JSON-file: {json_file}")
+    print(f"  - Intro/outro: {intro_outro}")
 
     processor = VideoProcessor(
         input_video_path=input_video,
