@@ -66,7 +66,7 @@ class VideoProcessor:
                 '-select_streams', 'v:0',
                 '-show_entries', 'stream=r_frame_rate',
                 '-of', 'json',
-                str(video_path)  # Преобразуем в строку для безопасности
+                str(video_path)
             ]
             result = self._run_command(cmd)
             data = json.loads(result.stdout)
