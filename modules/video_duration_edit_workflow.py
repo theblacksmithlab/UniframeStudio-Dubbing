@@ -674,7 +674,7 @@ class VideoProcessor:
 
             print(f"Done! The result is saved in {self.output_video_path}")
 
-            self.cleanup()
+            # self.cleanup()
 
             return True
         except Exception as e:
