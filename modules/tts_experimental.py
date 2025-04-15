@@ -18,7 +18,8 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
     if output_audio_file is None:
         base_dir = os.path.dirname(translation_file)
         base_name = os.path.splitext(os.path.basename(translation_file))[0]
-        output_audio_file = os.path.join(base_dir, f"{base_name}.mp3")
+        # output_audio_file = os.path.join(base_dir, f"{base_name}.mp3")
+        output_audio_file = os.path.join(base_dir, f"en_audio.mp3")
 
     os.makedirs(os.path.dirname(output_audio_file), exist_ok=True)
 
@@ -145,15 +146,17 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
             print(f"  Generated audio duration: {actual_duration_ms}ms")
             data["segments"][i]["tts_duration"] = round(actual_duration_ms / 1000, 6)
 
-            speed_ratio = actual_duration_ms / original_duration_ms
-            data["segments"][i]["speed_ratio"] = round(speed_ratio, 6)
-
-            print(f"  Generated audio duration: {actual_duration_ms / 1000}s")
-            print(f"  Speed ratio for video adjustment: {speed_ratio:.2f}x")
+            # speed_ratio = actual_duration_ms / original_duration_ms
+            # data["segments"][i]["speed_ratio"] = round(speed_ratio, 6)
+            #
+            # print(f"  Generated audio duration: {actual_duration_ms / 1000}s")
+            # print(f"  Speed ratio for video adjustment: {speed_ratio:.2f}x")
 
             diff_ratio = abs(actual_duration_ms - original_duration_ms) / original_duration_ms
             if diff_ratio > 0.2:
                 print(f"  WARNING! TTS duration differs from target by more than 20% ({diff_ratio:.2%})")
+
+            data["segments"][i]["speed_ratio"] = round(diff_ratio, 2)
 
             segment_audio = match_target_amplitude(segment_audio, -16.0)
 
@@ -264,6 +267,30 @@ def assemble_audio_file(segments, output_file, intro=False, outro=False):
     print(f"Final audio assembled and saved to {output_file}")
     print(f"Final audio duration: {len(final_audio) / 1000:.2f} seconds")
 
+    stereo_output_file = os.path.splitext(output_file)[0] + "_stereo.mp3"
+
+    try:
+        if os.path.exists(output_file):
+            cmd = [
+                'ffmpeg',
+                '-i', output_file,
+                '-filter_complex', '[0]pan=stereo|c0=c0|c1=c0',
+                '-y',
+                stereo_output_file
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            if os.path.exists(stereo_output_file):
+                print(f"Stereo version of audio created and saved to {stereo_output_file}")
+            else:
+                print(f"Failed to create stereo version. Command exit code: {result.returncode}")
+        else:
+            print(f"Cannot create stereo version because original file not found: {output_file}")
+
+    except Exception as e:
+        print(f"Error creating stereo version: {e}")
+
     return output_file
 
 
@@ -271,7 +298,8 @@ def reassemble_audio_file(translation_file, output_audio_file=None, intro=False,
     if output_audio_file is None:
         base_dir = os.path.dirname(translation_file)
         base_name = os.path.splitext(os.path.basename(translation_file))[0]
-        output_audio_file = os.path.join(base_dir, f"{base_name}_reassembled.mp3")
+        # output_audio_file = os.path.join(base_dir, f"{base_name}_reassembled.mp3")
+        output_audio_file = os.path.join(base_dir, f"en_audio.mp3")
 
     with open(translation_file, "r", encoding="utf-8") as f:
         data = json.load(f)

@@ -96,7 +96,7 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
                 "voice_settings": {
                     "similarity_boost": 1,
                     "stability": 0.75,
-                    "speed": 0.9,
+                    "speed": 0.95,
                     "use_speaker_boost": True
                 },
                 "previous_text": previous_text,

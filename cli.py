@@ -10,6 +10,7 @@ from modules.transcription_correction import correct_transcript_segments
 from modules.translation import translate_transcript_segments
 from modules.tts_experimental import generate_tts_for_segments, reassemble_audio_file
 from modules.tts_correction_experimental import regenerate_segment
+from modules.video_duration_edit_workflow import VideoProcessor
 from modules.video_to_audio_conversion import extract_audio
 from modules.optimized_segmentation import optimize_transcription_segments
 
@@ -288,24 +289,51 @@ def main():
             traceback.print_exc()
             return
 
+
     elif args.command == "process_video":
-        json_path = args.input
-        if not json_path:
-            json_path = "../output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_adjusted_translated.json"
-
-        if not os.path.exists(json_path):
-            print(f"Error: JSON file {json_path} not found.")
-            return
-
-        print(f"Processing video segments using data from: {json_path}")
+        print("Starting video processing...")
         try:
-            from modules.video_duration_edit import process_video
-            result_file = process_video(json_path, convert_25fps=args.fps25)
 
-            if result_file:
-                print(f"Video processing completed successfully. The result was saved in file: {result_file}")
+            current_dir = os.path.abspath(os.getcwd())
+            input_dir = os.path.join(current_dir, "video_input")
+            output_dir = os.path.join(current_dir, "video_output")
+            resources_dir = os.path.join(current_dir, "resources")
+            input_video = os.path.join(input_dir, "input.mp4")
+            json_file = os.path.join(current_dir, "output", "timestamped_transcriptions",
+                                     "input_timestamped_corrected_cleaned_optimized_adjusted_translated.json")
+            output_video = os.path.join(output_dir, "output.mp4")
+            intro_outro = os.path.join(resources_dir, "intro_outro_converted.mp4")
+
+            os.makedirs(output_dir, exist_ok=True)
+
+            # Проверка наличия файлов
+            if not os.path.exists(input_video):
+                print(f"Error: Input video not found: {input_video}")
+                return
+
+            if not os.path.exists(json_file):
+                print(f"Error: JSON file not found: {json_file}")
+                return
+
+            if not os.path.exists(intro_outro):
+                print(f"Error: Intro/outro file not found: {intro_outro}")
+                return
+
+            processor = VideoProcessor(
+                input_video_path=input_video,
+                json_path=json_file,
+                output_video_path=output_video,
+                intro_outro_path=intro_outro,
+                target_fps=25
+            )
+
+            if processor.process():
+                print(f"Video processing completed successfully. The result was saved in file: {output_video}")
+            else:
+                print("Video processing failed.")
+
         except Exception as e:
-            print(f"Error processing video: {e}")
+            print(f"Error during video processing: {e}")
             import traceback
             traceback.print_exc()
             return

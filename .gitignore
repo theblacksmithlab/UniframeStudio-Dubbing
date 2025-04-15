@@ -60,6 +60,7 @@ video_input/
 *.mp3
 tts_reserve.py
 temp_audio_segments/
-video_segments/
 modules/legacy/
 output_final.mp4
+video_output/
+video_duration_edit_workflow_reserve.py

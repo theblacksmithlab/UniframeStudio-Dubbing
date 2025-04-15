@@ -52,9 +52,5 @@ python3 cli.py segment-tts --input output/timestamped_transcriptions/input_times
 # Reassemble output audio from prepared segments at output/temp_audio_segments:
 python3 cli.py reassemble --input output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_adjusted_translated.json --intro --outro
 
-# Edit original video duration with tts_duration info:
+# Edit original video duration with tts_duration info with 25 fps converting:
 python3 cli.py process_video
-
-python cli.py process_video --input path/to/tts_duration/file.json
-
-python cli.py process_video --fps25

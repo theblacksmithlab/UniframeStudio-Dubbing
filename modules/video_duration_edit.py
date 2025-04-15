@@ -4,11 +4,11 @@ import shutil
 import subprocess
 from tqdm import tqdm
 
-VIDEO_PATH = "../video_input/input.mp4"
-SEGMENTS_JSON = "../output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_adjusted_translated.json"
-SEGMENTS_DIR = "../video_segments"
-FINAL_OUTPUT = "../output_final.mp4"
-INTRO_OUTRO_FILE = "../resources/intro_outro_converted.mp4"
+VIDEO_PATH = "./video_input/input.mp4"
+SEGMENTS_JSON = "./output/timestamped_transcriptions/input_timestamped_corrected_cleaned_optimized_adjusted_translated.json"
+SEGMENTS_DIR = "./video_segments"
+FINAL_OUTPUT = "./output_final.mp4"
+INTRO_OUTRO_FILE = "./resources/intro_outro_converted.mp4"
 
 os.makedirs(SEGMENTS_DIR, exist_ok=True)
 
@@ -57,6 +57,125 @@ def extract_segment(input_path, start_sec, end_sec, output_path):
         return False
 
     return True
+
+
+def change_segment_duration(input_path, output_path, target_duration):
+    """
+    Принудительно устанавливает длительность видео с максимальной точностью
+    """
+    print(f"  Forcing exact duration: target={target_duration:.6f}s")
+
+    # Получаем длительность исходного видео
+    probe_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", input_path]
+    result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    original_duration = float(result.stdout.strip())
+
+    # Получаем информацию о кадрах
+    fps_cmd = ["ffprobe", "-v", "error", "-select_streams", "v",
+               "-show_entries", "stream=r_frame_rate,nb_frames", "-of", "json", input_path]
+    result = subprocess.run(fps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    info = json.loads(result.stdout)
+
+    fps_str = info["streams"][0]["r_frame_rate"]
+    if '/' in fps_str:
+        num, den = map(int, fps_str.split('/'))
+        fps = num / den
+    else:
+        fps = float(fps_str)
+
+    # Рассчитываем точное количество кадров для целевой длительности
+    target_frames = int(round(target_duration * fps))
+    output_fps = target_frames / target_duration
+
+    print(f"  Input: {original_duration:.6f}s at {fps:.2f}fps")
+    print(f"  Output: {target_duration:.6f}s with {target_frames} frames at {output_fps:.6f}fps")
+
+    # Временный файл с извлеченными кадрами
+    temp_dir = f"{output_path}.frames"
+    os.makedirs(temp_dir, exist_ok=True)
+
+    # Извлекаем все кадры
+    extract_cmd = [
+        "ffmpeg", "-y",
+        "-i", input_path,
+        "-vsync", "0",
+        f"{temp_dir}/frame_%05d.png"
+    ]
+
+    subprocess.run(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Определяем, сколько кадров извлечено
+    frames = sorted([f for f in os.listdir(temp_dir) if f.endswith('.png')])
+
+    if not frames:
+        print("  Error: No frames extracted!")
+        return False
+
+    print(f"  Extracted {len(frames)} frames")
+
+    # Определяем, нужно ли добавить или удалить кадры
+    if len(frames) > target_frames:
+        # Нужно удалить кадры
+        to_remove = len(frames) - target_frames
+        if to_remove > 0:
+            print(f"  Removing {to_remove} frames to match target duration")
+            # Равномерно удаляем кадры
+            keep_ratio = target_frames / len(frames)
+            to_keep = [frames[int(i / keep_ratio)] for i in range(target_frames)]
+
+            # Удаляем неиспользуемые кадры
+            for frame in frames:
+                if frame not in to_keep:
+                    os.remove(os.path.join(temp_dir, frame))
+
+    elif len(frames) < target_frames:
+        # Нужно добавить кадры (дублировать)
+        to_add = target_frames - len(frames)
+        if to_add > 0:
+            print(f"  Adding {to_add} frames to match target duration")
+            # Равномерно дублируем кадры
+            step = len(frames) / to_add
+
+            for i in range(to_add):
+                frame_idx = min(int(i * step), len(frames) - 1)
+                src = os.path.join(temp_dir, frames[frame_idx])
+                dst = os.path.join(temp_dir, f"dup_{i:05d}.png")
+                shutil.copy(src, dst)
+
+    # Создаем видео с точным fps
+    concat_cmd = [
+        "ffmpeg", "-y",
+        "-framerate", f"{output_fps}",
+        "-pattern_type", "glob",
+        "-i", f"{temp_dir}/*.png",
+        "-c:v", "libx264",
+        "-preset", "veryslow",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-an",  # Без аудио
+        output_path
+    ]
+
+    subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Очищаем временную директорию
+    shutil.rmtree(temp_dir)
+
+    # Проверяем результат
+    check_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", output_path]
+    result = subprocess.run(check_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    if result.stdout.strip():
+        final_duration = float(result.stdout.strip())
+        error = abs(final_duration - target_duration)
+        print(
+            f"  Final result: duration={final_duration:.6f}s, error={error:.6f}s ({error / target_duration * 100:.4f}%)")
+        return error < 0.1
+    else:
+        print("  Error: Could not determine final duration")
+        return False
 
 def adjust_speed(input_path, output_path, original_duration, target_duration):
     speed_factor = original_duration / target_duration
@@ -129,45 +248,99 @@ def concatenate_segments(segment_paths, output_path):
         segment_paths.append(outro_path)
         print(f"  Added outro from: {INTRO_OUTRO_FILE}")
 
+    # Проверка всех сегментов перед конкатенацией
+    valid_segments = []
+    total_expected_duration = 0
+
+    for i, path in enumerate(segment_paths):
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            # Проверка длительности и fps
+            probe_cmd = ["ffprobe", "-v", "error", "-show_entries",
+                         "format=duration:stream=r_frame_rate", "-of", "json", path]
+            result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+            try:
+                info = json.loads(result.stdout)
+                duration = float(info["format"]["duration"])
+                fps = info["streams"][0]["r_frame_rate"]
+
+                print(f"  Segment {i}: {os.path.basename(path)}, duration={duration:.3f}s, fps={fps}")
+                valid_segments.append(path)
+                total_expected_duration += duration
+
+            except (json.JSONDecodeError, KeyError, IndexError) as e:
+                print(f"  Warning: Unable to analyze segment {i}: {e}")
+                valid_segments.append(path)
+        else:
+            print(f"  Warning: Skipping invalid segment {path}")
+
+    print(f"  Total expected duration: {total_expected_duration:.3f} seconds")
+
     list_file = os.path.join(SEGMENTS_DIR, "segments.txt")
     with open(list_file, "w") as f:
-        for path in segment_paths:
-            if os.path.exists(path) and os.path.getsize(path) > 0:
-                f.write(f"file '{os.path.abspath(path)}'\n")
-            else:
-                print(f"  Warning: Skipping invalid segment {path}")
+        for path in valid_segments:
+            f.write(f"file '{os.path.abspath(path)}'\n")
 
+    # Используем -c copy для сохранения оригинальных потоков без перекодирования
     cmd = [
         "ffmpeg", "-y",
         "-f", "concat",
         "-safe", "0",
         "-i", list_file,
-        "-c:v", "libx264", "-preset", "medium", "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        "-an",
+        "-c", "copy",  # Копируем потоки без перекодирования
+        "-an",  # Без аудио
         output_path
     ]
 
-    # # For ultimate quality
-    # cmd = [
-    #     "ffmpeg", "-y",
-    #     "-f", "concat",
-    #     "-safe", "0",
-    #     "-i", list_file,
-    #     "-c:v", "libx264", "-preset", "veryslow", "-crf", "16",
-    #     "-pix_fmt", "yuv420p",
-    #     "-movflags", "+faststart",
-    #     "-an",
-    #     output_path
-    # ]
-
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        print(f"  Error concatenating segments: {result.stderr.decode('utf-8')[:200]}")
-        return False
 
-    print(f"Final video created: {output_path}")
+    # Если простая конкатенация не работает, пробуем с перекодированием
+    if result.returncode != 0:
+        print(f"  Simple concatenation failed, trying with re-encoding...")
+
+        cmd_encode = [
+            "ffmpeg", "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", list_file,
+            "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            "-vsync", "vfr",  # Важно для сохранения временных меток
+            "-an",
+            output_path
+        ]
+
+        result = subprocess.run(cmd_encode, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        if result.returncode != 0:
+            error_message = result.stderr.decode('utf-8')
+            print(f"  Error concatenating segments: {error_message[:200]}...")
+
+            # Сохраняем полный лог ошибки для анализа
+            error_log = os.path.join(SEGMENTS_DIR, "concat_error.log")
+            with open(error_log, "w") as f:
+                f.write(error_message)
+            print(f"  Full error log saved to: {error_log}")
+
+            return False
+
+    # Проверяем итоговую длительность
+    check_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", output_path]
+    result = subprocess.run(check_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    if result.stdout.strip():
+        final_duration = float(result.stdout.strip())
+        print(f"Final video created: {output_path}, duration={final_duration:.3f}s")
+
+        # Проверяем отклонение от ожидаемой длительности
+        if abs(final_duration - total_expected_duration) > 5:  # Допустимая погрешность 5 секунд
+            print(
+                f"WARNING: Final duration ({final_duration:.3f}s) significantly differs from expected ({total_expected_duration:.3f}s)")
+    else:
+        print(f"Final video created: {output_path}")
+
     return True
 
 def get_video_duration(video_path):
@@ -235,12 +408,11 @@ def process_video(json_path=None, convert_25fps=False):
             continue
 
         final_path = os.path.join(SEGMENTS_DIR, f"segment_{segment_index:03d}.mp4")
-        if adjust_speed(original_segment, final_path, original_duration, tts_duration):
+        if change_segment_duration(original_segment, final_path, tts_duration):
             output_paths.append(final_path)
             print(f"  Successfully processed segment {i}")
         else:
-            print(f"  Warning: Could not achieve exact target duration for segment {i}")
-            output_paths.append(final_path)
+            print(f"  Warning: Failed to process segment {i}")
 
         os.remove(original_segment)
 
