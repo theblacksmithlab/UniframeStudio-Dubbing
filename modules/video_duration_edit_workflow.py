@@ -189,7 +189,7 @@ class VideoProcessor:
                 pixel_format = 'yuv420p'
                 # NVENC does not support crf, use high bitrate
                 quality_params = ['-b:v', '20M']
-                preset = 'slow'  # NVENC uses other presets
+                preset = 'slow'  # NVENC presets
             else:
                 print("GPU not detected or not supported. Using CPU")
                 encoder = 'libx264'
@@ -199,7 +199,6 @@ class VideoProcessor:
 
             if not self.needs_fps_conversion:
                 print(f"The original video already has the required frame rate ({self.target_fps} FPS)")
-                # Copy the original but delete the audio
                 cmd = [
                           'ffmpeg',
                           '-i', input_path,
@@ -239,7 +238,7 @@ class VideoProcessor:
             return output_path
         except Exception as e:
             print(f"Error converting video: {e}")
-            # If the error is related to the GPU, try to fallback to the CPU
+            # If the error is related to the GPU, try CPU fallback
             if has_gpu and ("NVENC" in str(e) or "GPU" in str(e) or "nvenc" in str(e)):
                 print("Error using GPU. Trying conversion on CPU...")
                 # Set the flag that the GPU is unavailable
@@ -262,7 +261,7 @@ class VideoProcessor:
             pixel_format = 'yuv420p'
             # NVENC does not support crf, use high bitrate
             quality_params = ['-b:v', '20M']
-            preset = 'slow' # NVENC uses other presets
+            preset = 'slow' # NVENC presets
         else:
             print("GPU not detected or not supported. Using CPU")
             encoder = 'libx264'
@@ -387,7 +386,6 @@ class VideoProcessor:
                     print(f"Warning: Segment file not found: {input_path}")
                     continue
 
-                # Getting original duration from JSON and adjusting tts_duration
                 original_duration = self._get_video_duration(input_path)
                 target_duration = segment['tts_duration']
                 adjusted_target_duration = self._adjust_duration_for_fps(target_duration)
