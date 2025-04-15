@@ -57,6 +57,43 @@ class VideoProcessor:
             print(f"Исключение при выполнении команды: {e}")
             raise
 
+    def _check_gpu_availability(self):
+        """Проверяет доступность NVIDIA GPU для кодирования видео"""
+        # Если мы уже проверяли и знаем результат, используем его
+        if hasattr(self, '_gpu_available'):
+            return self._gpu_available
+
+        try:
+            # Запускаем FFmpeg с запросом доступных кодеков
+            cmd = ['ffmpeg', '-encoders']
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            # Проверяем наличие h264_nvenc среди доступных кодеков
+            if 'h264_nvenc' in result.stdout:
+                # Пытаемся выполнить тестовое кодирование
+                test_cmd = [
+                    'ffmpeg',
+                    '-f', 'lavfi',
+                    '-i', 'nullsrc=s=640x480:d=1',
+                    '-c:v', 'h264_nvenc',
+                    '-f', 'null',
+                    '-'
+                ]
+                test_result = subprocess.run(test_cmd, capture_output=True, text=True)
+
+                # Если тест прошел без ошибок, значит GPU доступен
+                if test_result.returncode == 0:
+                    self._gpu_available = True
+                    return True
+
+            # Если мы здесь, значит GPU недоступен или не поддерживается
+            self._gpu_available = False
+            return False
+        except Exception as e:
+            print(f"Ошибка при проверке GPU: {e}")
+            self._gpu_available = False
+            return False
+
     def _get_video_fps(self, video_path):
         """Получение FPS видео"""
         try:
@@ -142,55 +179,49 @@ class VideoProcessor:
             input_path = str(self.input_video_path)
             output_path = str(self.converted_video_path)
 
+            has_gpu = self._check_gpu_availability()
+
+            if has_gpu:
+                print("Используем NVIDIA GPU для ускорения конвертации")
+                encoder = 'h264_nvenc'
+                # NVENC не поддерживает yuv444p, используем совместимый формат
+                pixel_format = 'yuv420p'
+                # NVENC не поддерживает crf, используем высокий битрейт
+                quality_params = ['-b:v', '20M']
+                preset = 'slow'  # NVENC использует другие пресеты
+            else:
+                print("GPU не обнаружен или не поддерживается. Используем CPU")
+                encoder = 'libx264'
+                pixel_format = 'yuv444p'
+                quality_params = ['-crf', '0']
+                preset = 'veryslow'
+
             if not self.needs_fps_conversion:
                 print(f"Исходное видео уже имеет нужную частоту кадров ({self.target_fps} FPS)")
                 # Копируем оригинал, но удаляем аудио
-                # # Faster, but with lower quality
-                # cmd = [
-                #     'ffmpeg',
-                #     '-i', input_path,
-                #     '-an',  # Удаление аудио
-                #     '-c:v', 'libx264',
-                #     '-crf', '18',  # Высокое качество видео
-                #     '-preset', 'medium',
-                #     output_path
-                # ]
-
                 cmd = [
-                    'ffmpeg',
-                    '-i', input_path,
-                    '-an',
-                    '-c:v', 'libx264',
-                    '-crf', '0',
-                    '-preset', 'veryslow',
-                    '-pix_fmt', 'yuv444p',
-                    output_path
-                ]
-
+                          'ffmpeg',
+                          '-i', input_path,
+                          '-an',  # Удаление аудио
+                          '-c:v', encoder,
+                      ] + quality_params + [
+                          '-preset', preset,
+                          '-pix_fmt', pixel_format,
+                          output_path
+                      ]
             else:
                 print(f"Конвертация видео из {self.input_fps} FPS в {self.target_fps} FPS")
-                # # Faster, but with lowe quality
-                # cmd = [
-                #     'ffmpeg',
-                #     '-i', input_path,
-                #     '-an',  # Удаление аудио
-                #     '-c:v', 'libx264',
-                #     '-crf', '18',  # Высокое качество видео
-                #     '-preset', 'medium',
-                #     '-r', str(self.target_fps),
-                #     output_path
-                # ]
                 cmd = [
-                    'ffmpeg',
-                    '-i', input_path,
-                    '-an',
-                    '-c:v', 'libx264',
-                    '-crf', '0',
-                    '-preset', 'veryslow',
-                    '-pix_fmt', 'yuv444p',
-                    '-r', str(self.target_fps),
-                    output_path
-                ]
+                          'ffmpeg',
+                          '-i', input_path,
+                          '-an',  # Удаление аудио
+                          '-c:v', encoder,
+                      ] + quality_params + [
+                          '-preset', preset,
+                          '-pix_fmt', pixel_format,
+                          '-r', str(self.target_fps),
+                          output_path
+                      ]
 
             self._run_command(cmd)
 
@@ -207,6 +238,13 @@ class VideoProcessor:
             return output_path
         except Exception as e:
             print(f"Ошибка при конвертации видео: {e}")
+            # Если ошибка связана с GPU, пробуем fallback на CPU
+            if has_gpu and ("NVENC" in str(e) or "GPU" in str(e) or "nvenc" in str(e)):
+                print("Ошибка при использовании GPU. Пробуем конвертацию на CPU...")
+                # Устанавливаем флаг, что GPU недоступен
+                self._gpu_available = False
+                # Рекурсивно вызываем ту же функцию, которая теперь будет использовать CPU
+                return self.convert_to_target_fps()
             raise
 
     def extract_segments(self):
