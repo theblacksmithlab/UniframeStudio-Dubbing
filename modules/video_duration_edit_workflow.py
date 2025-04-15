@@ -16,7 +16,7 @@ class VideoProcessor:
         :param intro_outro_path: Path to intro/outro file
         :param target_fps: Target FPS (25 by default)
         """
-        self._gpu_available = None
+
         self.input_video_path = input_video_path
         self.json_path = json_path
         self.output_video_path = output_video_path
