@@ -113,7 +113,7 @@ def main():
                                    help="Add outro audio after the last segment")
 
     # Sub-parser for processing input video
-    process_video_parser = subparsers.add_parser("process_video", help="Process video according to TTS duration")
+    subparsers.add_parser("process_video", help="Process video according to TTS duration")
 
     # Parsing arguments
     args = parser.parse_args()
