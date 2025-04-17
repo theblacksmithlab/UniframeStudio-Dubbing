@@ -23,6 +23,8 @@ class VideoProcessor:
         self.intro_outro_path = intro_outro_path
         self.target_fps = target_fps
 
+        self._gpu_available = True
+
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = os.path.dirname(script_dir)
         self.temp_dir = Path(os.path.join(project_dir, "temp_processing"))
@@ -183,19 +185,31 @@ class VideoProcessor:
             has_gpu = self._check_gpu_availability()
 
             if has_gpu:
-                print("Using NVIDIA GPU to speed up conversion")
+                print("Using NVIDIA GPU to speed up conversion with maximum quality")
                 encoder = 'h264_nvenc'
                 # NVENC does not support yuv444p, use compatible format
                 pixel_format = 'yuv420p'
-                # NVENC does not support crf, use high bitrate
-                quality_params = ['-b:v', '20M']
-                preset = 'slow'  # NVENC presets
+                # High quality NVENC parameters
+                quality_params = [
+                    '-b:v', '100M',  # Very high bitrate
+                    '-bufsize', '100M',  # Large buffer
+                    '-rc', 'vbr_hq',  # High quality variable bitrate
+                    '-rc-lookahead', '32',  # Maximum lookahead window
+                    '-spatial_aq', '1',  # Spatial adaptive quantization
+                    '-temporal_aq', '1',  # Temporal adaptive quantization
+                    '-aq-strength', '15',  # Maximum adaptive quantization strength
+                    '-nonref_p', '0',  # All P-frames are reference frames
+                    '-weighted_pred', '1'  # Weighted prediction for better transitions
+                ]
+                preset = 'p7'  # Highest quality NVENC preset
+                extra_params = ['-tune', 'hq']  # High quality tuning
             else:
                 print("GPU not detected or not supported. Using CPU")
                 encoder = 'libx264'
                 pixel_format = 'yuv444p'
-                quality_params = ['-crf', '0']
-                preset = 'veryslow'
+                quality_params = ['-crf', '0']  # Lossless quality
+                preset = 'veryslow'  # Highest quality preset
+                extra_params = ['-tune', 'film']
 
             if not self.needs_fps_conversion:
                 print(f"The original video already has the required frame rate ({self.target_fps} FPS)")
@@ -207,6 +221,7 @@ class VideoProcessor:
                       ] + quality_params + [
                           '-preset', preset,
                           '-pix_fmt', pixel_format,
+                      ] + extra_params + [
                           output_path
                       ]
             else:
@@ -219,6 +234,7 @@ class VideoProcessor:
                       ] + quality_params + [
                           '-preset', preset,
                           '-pix_fmt', pixel_format,
+                      ] + extra_params + [
                           '-r', str(self.target_fps),
                           output_path
                       ]
@@ -255,38 +271,34 @@ class VideoProcessor:
         has_gpu = self._check_gpu_availability()
 
         if has_gpu:
-            print("Using NVIDIA GPU to speed up segment extraction")
+            print("Using NVIDIA GPU to speed up conversion with maximum quality")
             encoder = 'h264_nvenc'
-            # NVENC does not support yuv444p, use a compatible format
             pixel_format = 'yuv420p'
-            # NVENC does not support crf, use high bitrate
-            quality_params = ['-b:v', '20M']
-            preset = 'slow' # NVENC presets
+            quality_params = [
+                '-b:v', '100M',  # Very high bitrate
+                '-bufsize', '100M',  # Large buffer
+                '-rc', 'vbr_hq',  # High quality variable bitrate
+                '-rc-lookahead', '32',  # Maximum lookahead window
+                '-spatial_aq', '1',  # Spatial adaptive quantization
+                '-temporal_aq', '1',  # Temporal adaptive quantization
+                '-aq-strength', '15',  # Maximum adaptive quantization strength
+                '-nonref_p', '0',  # All P-frames are reference frames
+                '-weighted_pred', '1'  # Weighted prediction for better transitions
+            ]
+            preset = 'p7'  # Highest quality NVENC preset
+            extra_params = ['-tune', 'hq']  # High quality tuning
         else:
             print("GPU not detected or not supported. Using CPU")
             encoder = 'libx264'
             pixel_format = 'yuv444p'
-            quality_params = ['-crf', '0']
-            preset = 'veryslow'
+            quality_params = ['-crf', '0']  # Lossless quality
+            preset = 'veryslow'  # Highest quality preset
+            extra_params = ['-tune', 'film']
 
         for i, segment in enumerate(segments):
             start = segment['start']
             end = segment['end']
             output_path = self.segments_dir / f"segment_{i:04d}.mp4"
-
-            # Segment extracting
-            # # Faster, but with lower quality
-            # cmd = [
-            #     'ffmpeg',
-            #     '-i', video_path,
-            #     '-ss', str(start),
-            #     '-to', str(end),
-            #     '-c:v', 'libx264',
-            #     '-crf', '18',
-            #     '-preset', 'veryfast',
-            #     '-an',
-            #     output_path
-            # ]
 
             try:
                 cmd = [
@@ -298,8 +310,9 @@ class VideoProcessor:
                       ] + quality_params + [
                           '-preset', preset,
                           '-pix_fmt', pixel_format,
+                      ] + extra_params + [
                           '-an',
-                          output_path
+                          str(output_path)
                       ]
 
                 self._run_command(cmd)
@@ -317,8 +330,9 @@ class VideoProcessor:
                         '-crf', '0',
                         '-preset', 'veryslow',
                         '-pix_fmt', 'yuv444p',
+                        '-tune', 'film',
                         '-an',
-                        output_path
+                        str(output_path)
                     ]
                     self._run_command(fallback_cmd)
 
@@ -337,11 +351,11 @@ class VideoProcessor:
                                 '-ss', str(gap_start),
                                 '-to', str(gap_end),
                                 '-c:v', encoder,
-                                '-b:v', '10M',
-                                '-preset', 'fast',
+                                '-b:v', '50M',
+                                '-preset', 'p5',
                                 '-pix_fmt', pixel_format,
                                 '-an',
-                                gap_path
+                                str(gap_path)
                             ]
                         else:
                             gap_cmd = [
@@ -351,9 +365,10 @@ class VideoProcessor:
                                 '-to', str(gap_end),
                                 '-c:v', 'libx264',
                                 '-crf', '18',
-                                '-preset', 'veryfast',
+                                '-preset', 'medium',
+                                '-pix_fmt', 'yuv420p',
                                 '-an',
-                                gap_path
+                                str(gap_path)
                             ]
 
                         self._run_command(gap_cmd)
@@ -367,15 +382,42 @@ class VideoProcessor:
                             '-to', str(gap_end),
                             '-c:v', 'libx264',
                             '-crf', '18',
-                            '-preset', 'veryfast',
+                            '-preset', 'medium',
                             '-an',
-                            gap_path
+                            str(gap_path)
                         ]
                         self._run_command(fallback_gap_cmd)
 
     def process_segments(self):
         """Processing all segments with changes in their duration"""
         segments = self.data.get('segments', [])
+
+        has_gpu = self._check_gpu_availability()
+
+        if has_gpu:
+            print("Using NVIDIA GPU to speed up conversion with maximum quality")
+            encoder = 'h264_nvenc'
+            pixel_format = 'yuv420p'
+            quality_params = [
+                '-b:v', '100M',
+                '-bufsize', '100M',
+                '-rc', 'vbr_hq',
+                '-rc-lookahead', '32',
+                '-spatial_aq', '1',
+                '-temporal_aq', '1',
+                '-aq-strength', '15',
+                '-nonref_p', '0',
+                '-weighted_pred', '1'
+            ]
+            preset = 'p7'
+            extra_params = ['-tune', 'hq']
+        else:
+            print("GPU not detected or not supported. Using CPU")
+            encoder = 'libx264'
+            pixel_format = 'yuv444p'
+            quality_params = ['-crf', '0']
+            preset = 'veryslow'
+            extra_params = ['-tune', 'film']
 
         for i, segment in enumerate(segments):
             try:
@@ -410,43 +452,53 @@ class VideoProcessor:
                     print(f"Set exact duration for segment {i}...")
                     speed_factor = adjusted_target_duration / original_duration
 
-                    # Use a combination of speed change and precise duration for better quality
-                    # # Faster, but with lower quality
-                    # cmd = [
-                    #     'ffmpeg',
-                    #     '-i', str(input_path),
-                    #     '-filter:v', f'setpts={speed_factor}*PTS,fps={self.target_fps}',
-                    #     '-r', str(self.target_fps),
-                    #     '-c:v', 'libx264',
-                    #     '-crf', '18',
-                    #     '-preset', 'medium',
-                    #     '-an',
-                    #     '-t', str(adjusted_target_duration),
-                    #     str(output_path)
-                    # ]
+                    try:
+                        cmd = [
+                                  'ffmpeg',
+                                  '-i', str(input_path),
+                                  '-filter:v', f'setpts={speed_factor}*PTS,fps={self.target_fps}',
+                                  # Changing video segment's speed and guarantee accurate FPS
+                                  '-r', str(self.target_fps),
+                                  '-c:v', encoder,
+                              ] + quality_params + [
+                                  '-preset', preset,
+                                  '-pix_fmt', pixel_format,
+                              ] + extra_params + [
+                                  '-an',
+                                  '-t', str(adjusted_target_duration),  # Force the duration
+                                  str(output_path)
+                              ]
 
-                    cmd = [
-                        'ffmpeg',
-                        '-i', str(input_path),
-                        '-filter:v', f'setpts={speed_factor}*PTS,fps={self.target_fps}',
-                        '-r', str(self.target_fps),
-                        '-c:v', 'libx264',
-                        '-crf', '0',
-                        '-preset', 'veryslow',
-                        '-pix_fmt', 'yuv444p',
-                        '-an',
-                        '-t', str(adjusted_target_duration),
-                        str(output_path)
-                    ]
+                        self._run_command(cmd)
 
-                    self._run_command(cmd)
+                        if not os.path.exists(output_path):
+                            raise FileNotFoundError(f"The processed file was not created: {output_path}")
 
-                    # Check that the file was created
-                    if not os.path.exists(output_path):
-                        print(f"Error: The processed file was not created: {output_path}")
-                        continue
+                        actual_duration = self._get_video_duration(output_path)
 
-                    actual_duration = self._get_video_duration(output_path)
+                    except Exception as e:
+                        if has_gpu:
+                            print(f"Error processing segment {i} with GPU: {e}")
+                            print(f"Trying to process segment {i} with CPU...")
+                            # CPU fallback
+                            cmd = [
+                                'ffmpeg',
+                                '-i', str(input_path),
+                                '-filter:v', f'setpts={speed_factor}*PTS,fps={self.target_fps}',
+                                '-r', str(self.target_fps),
+                                '-c:v', 'libx264',
+                                '-crf', '0',
+                                '-preset', 'veryslow',
+                                '-pix_fmt', 'yuv444p',
+                                '-tune', 'film',
+                                '-an',
+                                '-t', str(adjusted_target_duration),
+                                str(output_path)
+                            ]
+                            self._run_command(cmd)
+                            actual_duration = self._get_video_duration(output_path)
+                        else:
+                            raise
 
                 duration_diff = abs(actual_duration - adjusted_target_duration)
 
@@ -515,16 +567,29 @@ class VideoProcessor:
                     print(
                         f"Duration: {file_duration:.4f} sec, FPS: {file_fps}, approximate number of frames: {frame_count_in_file}")
 
+                    has_gpu = self._check_gpu_availability()
+
                     # Extract each frame from the file
                     output_pattern = frames_dir / f"{file_id}_%05d.png"
 
-                    cmd = [
-                        'ffmpeg',
-                        '-i', file_path,
-                        '-vf', f'fps={self.target_fps}',
-                        '-q:v', '1',
-                        str(output_pattern)
-                    ]
+                    if has_gpu:
+                        print(f"  Using GPU for frame extraction from {file_id}")
+                        cmd = [
+                            'ffmpeg',
+                            '-i', file_path,
+                            '-vf', f'fps={self.target_fps}',
+                            '-q:v', '1',  # Maximum quality
+                            str(output_pattern)
+                        ]
+                    else:
+                        print(f"  Using CPU for frame extraction from {file_id}")
+                        cmd = [
+                            'ffmpeg',
+                            '-i', file_path,
+                            '-vf', f'fps={self.target_fps}',
+                            '-q:v', '1',  # Maximum quality
+                            str(output_pattern)
+                        ]
 
                     self._run_command(cmd)
 
@@ -557,44 +622,31 @@ class VideoProcessor:
         has_gpu = self._check_gpu_availability()
 
         if has_gpu:
-            print("Using NVIDIA GPU for final video merging")
-            encoder = 'h264_nvenc'
-            # NVENC does not support yuv444p, use a compatible format
-            pixel_format = 'yuv420p'
-            # NVENC does not support crf, use high bitrate
-            quality_params = ['-b:v', '20M']
-            preset = 'slow'  # NVENC uses other presets
-
+            print("Using NVIDIA GPU for final video assembly with maximum quality")
             cmd = [
                 'ffmpeg',
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', str(frame_list_path),
                 '-vsync', 'vfr',
-                '-pix_fmt', pixel_format,
-                '-c:v', encoder,
-                '-b:v', '20M',
-                '-preset', preset,
+                '-pix_fmt', 'yuv420p',  # Compatible format for NVENC
+                '-c:v', 'h264_nvenc',
+                '-b:v', '100M',  # Very high bitrate
+                '-bufsize', '100M',  # Large buffer
+                '-rc', 'vbr_hq',  # High quality variable bitrate
+                '-rc-lookahead', '32',  # Maximum lookahead window
+                '-spatial_aq', '1',  # Spatial adaptive quantization
+                '-temporal_aq', '1',  # Temporal adaptive quantization
+                '-aq-strength', '15',  # Maximum adaptive quantization strength
+                '-nonref_p', '0',  # All P-frames are reference frames
+                '-weighted_pred', '1',  # Weighted prediction for better transitions
+                '-preset', 'p7',  # Highest quality NVENC preset
+                '-tune', 'hq',  # High quality tuning
                 '-movflags', '+faststart',
                 str(temp_output)
             ]
         else:
             print("GPU not detected or not supported. Using CPU for maximum quality")
-            # # Faster, but with lower quality
-            # cmd = [
-            #     'ffmpeg',
-            #     '-f', 'concat',
-            #     '-safe', '0',
-            #     '-i', str(frame_list_path),
-            #     '-vsync', 'vfr',
-            #     '-pix_fmt', 'yuv420p',
-            #     '-c:v', 'libx264',
-            #     '-crf', '18',
-            #     '-preset', 'medium',
-            #     '-movflags', '+faststart',
-            #     str(temp_output)
-            # ]
-
             cmd = [
                 'ffmpeg',
                 '-f', 'concat',
@@ -605,6 +657,7 @@ class VideoProcessor:
                 '-c:v', 'libx264',
                 '-crf', '0',
                 '-preset', 'veryslow',
+                '-tune', 'film',
                 '-movflags', '+faststart',
                 str(temp_output)
             ]
@@ -613,9 +666,9 @@ class VideoProcessor:
             self._run_command(cmd)
 
             if not os.path.exists(temp_output) and has_gpu:
-                print("Error using GPU. Trying CPU...")
+                print("Error using GPU. Trying CPU fallback...")
                 # CPU fallback
-                cmd = [
+                cpu_cmd = [
                     'ffmpeg',
                     '-f', 'concat',
                     '-safe', '0',
@@ -625,16 +678,17 @@ class VideoProcessor:
                     '-c:v', 'libx264',
                     '-crf', '0',
                     '-preset', 'veryslow',
+                    '-tune', 'film',
                     '-movflags', '+faststart',
                     str(temp_output)
                 ]
-                self._run_command(cmd)
+                self._run_command(cpu_cmd)
         except Exception as e:
-            print(f"Error merging video: {e}")
+            print(f"Error during video assembly: {e}")
             if has_gpu:
-                print("Trying CPU for final merge...")
-                # CPU Fallback
-                cmd = [
+                print("Trying CPU fallback for final assembly...")
+                # CPU fallback
+                cpu_cmd = [
                     'ffmpeg',
                     '-f', 'concat',
                     '-safe', '0',
@@ -644,10 +698,11 @@ class VideoProcessor:
                     '-c:v', 'libx264',
                     '-crf', '0',
                     '-preset', 'veryslow',
+                    '-tune', 'film',
                     '-movflags', '+faststart',
                     str(temp_output)
                 ]
-                self._run_command(cmd)
+                self._run_command(cpu_cmd)
 
         if os.path.exists(temp_output):
             video_duration = self._get_video_duration(temp_output)
