@@ -649,6 +649,35 @@ class VideoProcessor:
                 ]
                 self._run_command(cmd)
 
+        if os.path.exists(temp_output):
+            video_duration = self._get_video_duration(temp_output)
+            print(f"Video successfully created! Duration: {video_duration:.4f} sec")
+
+            # Copy video to output directory
+            shutil.copy(temp_output, self.output_video_path)
+            print(f"Result saved to {self.output_video_path}")
+
+            # Verify file was copied correctly
+            if os.path.exists(self.output_video_path):
+                print(f"Verification: file successfully copied to {self.output_video_path}")
+                print(f"File size: {os.path.getsize(self.output_video_path) / (1024 * 1024):.2f} MB")
+            else:
+                print(f"Error: file was not copied to {self.output_video_path}")
+                # Try alternative copy method
+                try:
+                    os.system(f'cp "{temp_output}" "{self.output_video_path}"')
+                    if os.path.exists(self.output_video_path):
+                        print(f"File successfully copied using alternative method")
+                    else:
+                        print(f"Error: could not copy file even with alternative method")
+                except Exception as e:
+                    print(f"Error with alternative copying: {e}")
+
+            return True
+        else:
+            print("Error: Failed to create final video!")
+            return False
+
     def cleanup(self):
         """Deleting temp files"""
         try:
@@ -669,14 +698,17 @@ class VideoProcessor:
             print("3. Processing segments with changing duration...")
             self.process_segments()
 
-            print("4. Merging the final video with a reliable method...")
-            self.combine_final_video_reliable()
+            print("4. Combining final video using the reliable method...")
+            success = self.combine_final_video_reliable()
 
-            print(f"Done! The result is saved in {self.output_video_path}")
+            if success and os.path.exists(self.output_video_path):
+                print(f"Done! Result saved to {self.output_video_path}")
+                self.cleanup()
+            else:
+                print(f"Warning: final file was not found at {self.output_video_path}")
+                print("Temporary files will not be deleted for debugging purposes")
 
-            # self.cleanup()
-
-            return True
+            return success
         except Exception as e:
             print(f"Processing error: {e}")
             import traceback

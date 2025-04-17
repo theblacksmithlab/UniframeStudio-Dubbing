@@ -7,8 +7,8 @@ import openai
 from pydub import AudioSegment
 from dotenv import load_dotenv
 
-from modules.tts_experimental import make_api_request_with_retry
-from modules.tts_experimental import match_target_amplitude
+from modules.tts import make_api_request_with_retry
+from modules.tts import match_target_amplitude
 
 
 def regenerate_segment(translation_file, segment_id, output_audio_file=None, voice="onyx", dealer="openai"):
