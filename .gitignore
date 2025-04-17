@@ -64,3 +64,4 @@ modules/legacy/
 output_final.mp4
 video_output/
 video_duration_edit_workflow_reserve.py
+lessons_status.json

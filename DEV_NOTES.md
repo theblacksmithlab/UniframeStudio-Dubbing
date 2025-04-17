@@ -10,7 +10,7 @@ python3 cli.py transcribe --input audio_input/input.wav
 ## Timestamped transcription correction:
 python3 cli.py correct --input output/timestamped_transcriptions/input_timestamped.json
 
-# First segment start timestamp correction (FOR W3A ONLY):
+# First segment start timestamp correction (adding intro gap if needed):
 python3 cli.py correct --input output/timestamped_transcriptions/input_timestamped.json --start_timestamp 4.0
 
 ## Corrected timestamped transcription cleaning up:

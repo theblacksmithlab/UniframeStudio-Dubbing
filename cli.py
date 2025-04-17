@@ -8,8 +8,8 @@ from modules.cleaning_up_corrected_transcirption import cleanup_transcript_segme
 from modules.transcribe_with_timestamps import transcribe_audio_with_timestamps
 from modules.transcription_correction import correct_transcript_segments
 from modules.translation import translate_transcript_segments
-from modules.tts_experimental import generate_tts_for_segments, reassemble_audio_file
-from modules.tts_correction_experimental import regenerate_segment
+from modules.tts import generate_tts_for_segments, reassemble_audio_file
+from modules.tts_correction import regenerate_segment
 from modules.video_duration_edit_workflow import VideoProcessor
 from modules.video_to_audio_conversion import extract_audio
 from modules.optimized_segmentation import optimize_transcription_segments
@@ -19,12 +19,13 @@ def main():
     dotenv.load_dotenv()
 
     if not os.getenv("OPENAI_API_KEY"):
-        print("OPENAI_API_KEY must be set in .env file!")
+        print("OPENAI_API_KEY must be set in .env file to get full functionality!")
 
-    # CLI args parser initialization
-    parser = argparse.ArgumentParser(description="Smart audio transcription and translation tools")
+    if not os.getenv("ELEVENLABS_API_KEY"):
+        print("ELEVENLABS_API_KEY must be set in .env file to get full functionality!")
 
-    # Sub-parsers for commands initialization
+    parser = argparse.ArgumentParser(description="Smart dubbing system")
+
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
     # Audio extraction sub-parser
@@ -115,10 +116,9 @@ def main():
     # Sub-parser for processing input video
     subparsers.add_parser("process_video", help="Process video according to TTS duration")
 
-    # Parsing arguments
+
     args = parser.parse_args()
 
-    # Check if the command was specified
     if not args.command:
         parser.print_help()
         return
@@ -286,7 +286,7 @@ def main():
 
 
     elif args.command == "process_video":
-        print("Starting video processing...")
+        print("Initializing Video Processor...")
         try:
 
             current_dir = os.path.abspath(os.getcwd())
@@ -301,7 +301,6 @@ def main():
 
             os.makedirs(output_dir, exist_ok=True)
 
-            # Проверка наличия файлов
             if not os.path.exists(input_video):
                 print(f"Error: Input video not found: {input_video}")
                 return
