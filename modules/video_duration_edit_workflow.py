@@ -462,7 +462,6 @@ class VideoProcessor:
                 target_duration = segment['tts_duration']
                 adjusted_target_duration = self._adjust_duration_for_fps(target_duration)
 
-                # Check for negative or zero duration
                 if original_duration <= 0:
                     print(f"Error: Original duration of segment {i} is equal to or less than zero: {original_duration}")
                     continue
