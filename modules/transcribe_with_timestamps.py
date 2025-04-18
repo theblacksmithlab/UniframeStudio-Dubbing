@@ -73,73 +73,49 @@ def transcribe_audio_with_timestamps(input_audio):
 
 
 def transcribe(file_path):
-    with open(file_path, "rb") as audio_file:
-        response = openai.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_file,
-            response_format="verbose_json",
-            timestamp_granularities=["segment", "word"],
-            language="ru",
-            temperature=0.1
-        )
-
     try:
+        with open(file_path, "rb") as audio_file:
+            response = openai.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                response_format="verbose_json",
+                timestamp_granularities=["segment", "word"],
+                language="ru",
+                temperature=0.1
+            )
+
         if hasattr(response, "model_dump"):
-            response_dict = response.model_dump()
+            return response.model_dump()
         elif hasattr(response, "to_dict"):
-            response_dict = response.to_dict()
+            return response.to_dict()
         else:
-            response_dict = vars(response)
-    except:
-        response_dict = {
-            "text": response.text if hasattr(response, "text") else "",
-            "segments": [],
-            "words": []
-        }
+            result = {
+                "text": getattr(response, "text", ""),
+                "segments": [],
+                "words": []
+            }
 
-        if hasattr(response, "segments"):
-            for seg in response.segments:
-                try:
-                    if hasattr(seg, "model_dump"):
-                        segment_dict = seg.model_dump()
-                    elif hasattr(seg, "to_dict"):
-                        segment_dict = seg.to_dict()
-                    else:
-                        segment_dict = vars(seg)
+            segments = getattr(response, "segments", [])
+            for segment in segments:
+                seg_dict = {
+                    "id": getattr(segment, "id", 0),
+                    "start": getattr(segment, "start", 0),
+                    "end": getattr(segment, "end", 0),
+                    "text": getattr(segment, "text", "")
+                }
+                result["segments"].append(seg_dict)
 
-                    response_dict["segments"].append(segment_dict)
-                except:
-                    segment_dict = {
-                        "id": seg.id if hasattr(seg, "id") else 0,
-                        "start": seg.start if hasattr(seg, "start") else 0,
-                        "end": seg.end if hasattr(seg, "end") else 0,
-                        "text": seg.text if hasattr(seg, "text") else ""
-                    }
-                    response_dict["segments"].append(segment_dict)
+            words = getattr(response, "words", [])
+            for word in words:
+                word_dict = {
+                    "word": getattr(word, "word", ""),
+                    "start": getattr(word, "start", 0),
+                    "end": getattr(word, "end", 0),
+                    "probability": getattr(word, "probability", 0)
+                }
+                result["words"].append(word_dict)
 
-        if hasattr(response, "words"):
-            for word in response.words:
-                try:
-                    if hasattr(word, "model_dump"):
-                        word_dict = word.model_dump()
-                        if "probability" in word_dict:
-                            del word_dict["probability"]
-                    elif hasattr(word, "to_dict"):
-                        word_dict = word.to_dict()
-                        if "probability" in word_dict:
-                            del word_dict["probability"]
-                    else:
-                        word_dict = vars(word)
-                        if "probability" in word_dict:
-                            del word_dict["probability"]
-
-                    response_dict["words"].append(word_dict)
-                except:
-                    word_dict = {
-                        "word": word.word if hasattr(word, "word") else "",
-                        "start": word.start if hasattr(word, "start") else 0,
-                        "end": word.end if hasattr(word, "end") else 0
-                    }
-                    response_dict["words"].append(word_dict)
-
-    return response_dict
+            return result
+    except Exception as e:
+        print(f"Error transcribing {file_path}: {str(e)}")
+        return {"text": "", "segments": [], "words": []}
