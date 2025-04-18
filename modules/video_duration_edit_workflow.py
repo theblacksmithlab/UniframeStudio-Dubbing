@@ -97,7 +97,7 @@ class VideoProcessor:
             return False
 
     def _get_video_fps(self, video_path):
-        """Retrieve video FPS"""
+        """Get video FPS"""
         try:
             cmd = [
                 'ffprobe',
@@ -108,19 +108,39 @@ class VideoProcessor:
                 str(video_path)
             ]
             result = self._run_command(cmd)
-            data = json.loads(result.stdout)
 
-            if not data.get('streams') or len(data['streams']) == 0:
-                raise ValueError(f"Failed to get stream information: {result.stdout}")
+            if hasattr(result, 'stdout') and result.stdout:
+                data = json.loads(result.stdout)
+                if data and 'streams' in data and data['streams'] and 'r_frame_rate' in data['streams'][0]:
+                    fps_str = data['streams'][0]['r_frame_rate']
+                    if '/' in fps_str:
+                        numerator, denominator = map(int, fps_str.split('/'))
+                        return numerator / denominator
+                    else:
+                        return float(fps_str)
 
-            fps_str = data['streams'][0]['r_frame_rate']
-            numerator, denominator = map(int, fps_str.split('/'))
-            return numerator / denominator
+            cmd = [
+                'ffprobe',
+                '-v', 'error',
+                '-select_streams', 'v:0',
+                '-show_entries', 'stream=avg_frame_rate',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                str(video_path)
+            ]
+            result = self._run_command(cmd)
+            if hasattr(result, 'stdout') and result.stdout:
+                fps_str = result.stdout.strip()
+                if '/' in fps_str:
+                    numerator, denominator = map(int, fps_str.split('/'))
+                    return numerator / denominator
+                else:
+                    return float(fps_str)
+
+            print(f"Error while getting FPS: Could not parse FPS information")
+            return self.target_fps
         except Exception as e:
             print(f"Error while getting FPS: {e}")
-            # Return default value in case of error
-            print(f"Using default FPS value: 25")
-            return 25.0
+            return self.target_fps
 
     def _get_video_duration(self, video_path):
         """Retrieve video duration in seconds"""
@@ -196,8 +216,7 @@ class VideoProcessor:
                     '-temporal_aq', '1',  # Temporal adaptive quantization
                     '-aq-strength', '15',  # Maximum adaptive quantization strength
                     '-nonref_p', '0',  # All P-frames are reference frames
-                    '-weighted_pred', '1',  # Keep weighted prediction
-                    '-b_ref_mode', 'disabled'  # Disable B-frames for compatibility
+                    # Completely removed weighted_pred and b_ref_mode
                 ]
                 preset = 'p7'  # Highest quality NVENC preset
                 extra_params = ['-tune', 'hq']  # High quality tuning
