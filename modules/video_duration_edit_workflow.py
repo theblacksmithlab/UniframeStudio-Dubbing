@@ -191,7 +191,6 @@ class VideoProcessor:
             input_path = str(self.input_video_path)
             output_path = str(self.converted_video_path)
 
-            # Принудительно проверяем FPS входного видео
             cmd = ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
                    '-show_entries', 'stream=r_frame_rate', '-of', 'default=noprint_wrappers=1:nokey=1',
                    input_path]
@@ -209,7 +208,6 @@ class VideoProcessor:
                     print(f"Could not parse FPS fraction: {fps_str}")
                     # Fallback to stored value
 
-            # Проверка настроек конвертации
             if self.needs_fps_conversion:
                 print(f"Convert video from {self.input_fps} FPS to {self.target_fps} FPS")
             else:
