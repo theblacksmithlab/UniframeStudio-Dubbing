@@ -44,19 +44,31 @@ class VideoProcessor:
         self.converted_video_path = self.temp_dir / "converted_input.mp4"
 
     def _run_command(self, cmd, **kwargs):
-        """Safely execute external command with log output"""
+        """Safely execute external command with minimal logging"""
         try:
-            print(f"Executing a command: {' '.join(map(str, cmd))}")
+            # Set capture_output=True by default if not specified
+            if 'capture_output' not in kwargs:
+                kwargs['capture_output'] = True
+
+            # Only print the command without all details
+            command_str = ' '.join(map(str, cmd))
+            if len(command_str) > 100:
+                # Truncate long commands
+                command_str = command_str[:97] + "..."
+            print(f"Executing: {command_str}")
+
             result = subprocess.run(cmd, text=True, **kwargs)
 
             if result.returncode != 0:
-                print(f"Error executing command. Return code: {result.returncode}")
-                print(f"Standard output: {result.stdout}")
-                print(f"Error output: {result.stderr}")
+                print(f"Command failed with code {result.returncode}")
+                # Only print error output if it exists and is short
+                if hasattr(result, 'stderr') and result.stderr and len(result.stderr) < 200:
+                    print(f"Error: {result.stderr.strip()}")
                 raise subprocess.CalledProcessError(result.returncode, cmd)
+
             return result
         except Exception as e:
-            print(f"Exception while executing command: {e}")
+            print(f"Error: {str(e)}")
             raise
 
     def _check_gpu_availability(self):
@@ -415,22 +427,22 @@ class VideoProcessor:
         has_gpu = self._check_gpu_availability()
 
         if has_gpu:
-            print("Using NVIDIA GPU to speed up conversion with maximum quality")
+            print("Using NVIDIA GPU for segment processing with maximum quality")
             encoder = 'h264_nvenc'
             pixel_format = 'yuv420p'
             quality_params = [
-                '-b:v', '100M',
-                '-bufsize', '100M',
-                '-rc', 'vbr_hq',
-                '-rc-lookahead', '32',
-                '-spatial_aq', '1',
-                '-temporal_aq', '1',
-                '-aq-strength', '15',
-                '-nonref_p', '0',
-                '-weighted_pred', '1'
+                '-b:v', '100M',  # Very high bitrate
+                '-bufsize', '100M',  # Large buffer
+                '-rc', 'vbr',  # Changed from vbr_hq to vbr
+                '-rc-lookahead', '32',  # Maximum lookahead window
+                '-spatial_aq', '1',  # Spatial adaptive quantization
+                '-temporal_aq', '1',  # Temporal adaptive quantization
+                '-aq-strength', '15',  # Maximum adaptive quantization strength
+                '-nonref_p', '0'  # All P-frames are reference frames
+                # Removed weighted_pred parameter
             ]
-            preset = 'p7'
-            extra_params = ['-tune', 'hq']
+            preset = 'p7'  # Highest quality NVENC preset
+            extra_params = ['-tune', 'hq']  # High quality tuning
         else:
             print("GPU not detected or not supported. Using CPU")
             encoder = 'libx264'
@@ -653,13 +665,13 @@ class VideoProcessor:
                 '-c:v', 'h264_nvenc',
                 '-b:v', '100M',  # Very high bitrate
                 '-bufsize', '100M',  # Large buffer
-                '-rc', 'vbr_hq',  # High quality variable bitrate
+                '-rc', 'vbr',  # Changed from vbr_hq to vbr
                 '-rc-lookahead', '32',  # Maximum lookahead window
                 '-spatial_aq', '1',  # Spatial adaptive quantization
                 '-temporal_aq', '1',  # Temporal adaptive quantization
                 '-aq-strength', '15',  # Maximum adaptive quantization strength
                 '-nonref_p', '0',  # All P-frames are reference frames
-                '-weighted_pred', '1',  # Weighted prediction for better transitions
+                # Removed weighted_pred parameter
                 '-preset', 'p7',  # Highest quality NVENC preset
                 '-tune', 'hq',  # High quality tuning
                 '-movflags', '+faststart',
