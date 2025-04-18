@@ -186,19 +186,18 @@ class VideoProcessor:
             if has_gpu:
                 print("Using NVIDIA GPU to speed up conversion with maximum quality")
                 encoder = 'h264_nvenc'
-                # NVENC does not support yuv444p, use compatible format
                 pixel_format = 'yuv420p'
-                # High quality NVENC parameters
                 quality_params = [
                     '-b:v', '100M',  # Very high bitrate
                     '-bufsize', '100M',  # Large buffer
-                    '-rc', 'vbr_hq',  # High quality variable bitrate
+                    '-rc', 'vbr',  # Changed from vbr_hq to vbr (supported mode)
                     '-rc-lookahead', '32',  # Maximum lookahead window
                     '-spatial_aq', '1',  # Spatial adaptive quantization
                     '-temporal_aq', '1',  # Temporal adaptive quantization
                     '-aq-strength', '15',  # Maximum adaptive quantization strength
                     '-nonref_p', '0',  # All P-frames are reference frames
-                    '-weighted_pred', '1'  # Weighted prediction for better transitions
+                    '-weighted_pred', '1',  # Keep weighted prediction
+                    '-b_ref_mode', 'disabled'  # Disable B-frames for compatibility
                 ]
                 preset = 'p7'  # Highest quality NVENC preset
                 extra_params = ['-tune', 'hq']  # High quality tuning
@@ -208,14 +207,14 @@ class VideoProcessor:
                 pixel_format = 'yuv444p'
                 quality_params = ['-crf', '0']  # Lossless quality
                 preset = 'veryslow'  # Highest quality preset
-                extra_params = ['-tune', 'film']
+                extra_params = ['-tune', 'film']  # Film tuning for better quality
 
             if not self.needs_fps_conversion:
                 print(f"The original video already has the required frame rate ({self.target_fps} FPS)")
                 cmd = [
                           'ffmpeg',
                           '-i', input_path,
-                          '-an',
+                          '-an',  # Remove audio
                           '-c:v', encoder,
                       ] + quality_params + [
                           '-preset', preset,
@@ -228,7 +227,7 @@ class VideoProcessor:
                 cmd = [
                           'ffmpeg',
                           '-i', input_path,
-                          '-an',
+                          '-an',  # Remove audio
                           '-c:v', encoder,
                       ] + quality_params + [
                           '-preset', preset,
