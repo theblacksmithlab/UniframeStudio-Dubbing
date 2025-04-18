@@ -104,52 +104,20 @@ class VideoProcessor:
                 '-v', 'error',
                 '-select_streams', 'v:0',
                 '-show_entries', 'stream=r_frame_rate',
-                '-of', 'json',
-                str(video_path)
-            ]
-            result = self._run_command(cmd)
-
-            # Проверяем stdout напрямую
-            if hasattr(result, 'stdout') and result.stdout:
-                try:
-                    data = json.loads(result.stdout)
-                    if data and 'streams' in data and len(data['streams']) > 0 and 'r_frame_rate' in data['streams'][0]:
-                        fps_str = data['streams'][0]['r_frame_rate']
-                        if '/' in fps_str:
-                            numerator, denominator = map(int, fps_str.split('/'))
-                            fps = numerator / denominator
-                            print(f"Successfully parsed FPS: {fps}")
-                            return fps
-                except json.JSONDecodeError:
-                    print(f"Failed to parse JSON from ffprobe output: {result.stdout}")
-
-            # Альтернативный метод с прямым парсингом output
-            cmd = [
-                'ffprobe',
-                '-v', 'error',
-                '-select_streams', 'v:0',
-                '-show_entries', 'stream=avg_frame_rate',
                 '-of', 'default=noprint_wrappers=1:nokey=1',
                 str(video_path)
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)
             fps_str = result.stdout.strip()
-            print(f"Direct ffprobe output: '{fps_str}'")
 
             if fps_str and '/' in fps_str:
-                try:
-                    numerator, denominator = map(int, fps_str.split('/'))
-                    fps = numerator / denominator
-                    print(f"Parsed FPS from direct output: {fps}")
-                    return fps
-                except ValueError:
-                    print(f"Could not parse fraction: {fps_str}")
+                numerator, denominator = map(int, fps_str.split('/'))
+                return numerator / denominator
 
-            print(f"Warning: Using default FPS value of {self.target_fps}")
-            return self.target_fps  # возвращаем целевой FPS как запасной вариант
+            print(f"Warning: Could not determine video FPS, using default: {self.target_fps}")
+            return self.target_fps
         except Exception as e:
             print(f"Error while getting FPS: {e}")
-            print(f"Warning: Using default FPS value of {self.target_fps}")
             return self.target_fps
 
     def _get_video_duration(self, video_path):
