@@ -20,12 +20,13 @@ else
     echo "[INFO] pip is already installed: $(pip3 --version)"
 fi
 
-# 4. Install venv if it's not installed
-if ! python3 -m venv --help &> /dev/null; then
-    echo "[INFO] venv module not found. Installing..."
-    sudo apt install -y python3-venv
+# 4. Check and install venv module properly
+if ! python3 -m venv test_env 2>/dev/null; then
+    echo "[INFO] venv module not found or incomplete. Installing..."
+    sudo apt install -y python3.12-venv
 else
     echo "[INFO] venv is already available"
+    rm -rf test_env
 fi
 
 # 5. Create ~/projects directory if it doesn't exist and navigate into it

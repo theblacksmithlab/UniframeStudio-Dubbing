@@ -46,15 +46,16 @@ def _extract_single_audio(input_video):
         return None
 
     base_name = os.path.splitext(os.path.basename(input_video))[0]
-    output_audio = os.path.join(AUDIO_OUTPUT_DIR, f"{base_name}.wav")
+    output_audio = os.path.join(AUDIO_OUTPUT_DIR, f"{base_name}.mp3")
 
     command = [
         "ffmpeg", "-y",
         "-i", input_video,
         "-vn",
-        "-acodec", "pcm_s16le",
-        "-ar", "22050",
+        "-codec:a", "libmp3lame",
+        "-qscale:a", "2",
         "-ac", "1",
+        "-ar", "24000",
         output_audio
     ]
 
@@ -67,5 +68,10 @@ def _extract_single_audio(input_video):
         print(f"Exception occurred: {e}")
         return None
 
-    print(f"Audio successfully extracted: {output_audio}")
+    file_size_mb = os.path.getsize(output_audio) / (1024 * 1024)
+    print(f"Audio successfully extracted: {output_audio} (Size: {file_size_mb:.2f} MB)")
+
+    if file_size_mb > 25:
+        print(f"WARNING: Audio file is still larger than 25MB ({file_size_mb:.2f} MB). You may need to split it.")
+
     return output_audio
