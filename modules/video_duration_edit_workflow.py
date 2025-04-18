@@ -47,14 +47,13 @@ class VideoProcessor:
         """Safely execute external command with log output"""
         try:
             print(f"Executing a command: {' '.join(map(str, cmd))}")
-            result = subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+            result = subprocess.run(cmd, text=True, **kwargs)
 
             if result.returncode != 0:
                 print(f"Error executing command. Return code: {result.returncode}")
                 print(f"Standard output: {result.stdout}")
                 print(f"Error output: {result.stderr}")
-                raise subprocess.CalledProcessError(result.returncode, cmd,
-                                                    result.stdout, result.stderr)
+                raise subprocess.CalledProcessError(result.returncode, cmd)
             return result
         except Exception as e:
             print(f"Exception while executing command: {e}")
