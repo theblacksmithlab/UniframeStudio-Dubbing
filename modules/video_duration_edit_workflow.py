@@ -109,16 +109,21 @@ class VideoProcessor:
             ]
             result = self._run_command(cmd)
 
+            # Проверяем stdout напрямую
             if hasattr(result, 'stdout') and result.stdout:
-                data = json.loads(result.stdout)
-                if data and 'streams' in data and data['streams'] and 'r_frame_rate' in data['streams'][0]:
-                    fps_str = data['streams'][0]['r_frame_rate']
-                    if '/' in fps_str:
-                        numerator, denominator = map(int, fps_str.split('/'))
-                        return numerator / denominator
-                    else:
-                        return float(fps_str)
+                try:
+                    data = json.loads(result.stdout)
+                    if data and 'streams' in data and len(data['streams']) > 0 and 'r_frame_rate' in data['streams'][0]:
+                        fps_str = data['streams'][0]['r_frame_rate']
+                        if '/' in fps_str:
+                            numerator, denominator = map(int, fps_str.split('/'))
+                            fps = numerator / denominator
+                            print(f"Successfully parsed FPS: {fps}")
+                            return fps
+                except json.JSONDecodeError:
+                    print(f"Failed to parse JSON from ffprobe output: {result.stdout}")
 
+            # Альтернативный метод с прямым парсингом output
             cmd = [
                 'ffprobe',
                 '-v', 'error',
@@ -127,19 +132,24 @@ class VideoProcessor:
                 '-of', 'default=noprint_wrappers=1:nokey=1',
                 str(video_path)
             ]
-            result = self._run_command(cmd)
-            if hasattr(result, 'stdout') and result.stdout:
-                fps_str = result.stdout.strip()
-                if '/' in fps_str:
-                    numerator, denominator = map(int, fps_str.split('/'))
-                    return numerator / denominator
-                else:
-                    return float(fps_str)
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            fps_str = result.stdout.strip()
+            print(f"Direct ffprobe output: '{fps_str}'")
 
-            print(f"Error while getting FPS: Could not parse FPS information")
-            return self.target_fps
+            if fps_str and '/' in fps_str:
+                try:
+                    numerator, denominator = map(int, fps_str.split('/'))
+                    fps = numerator / denominator
+                    print(f"Parsed FPS from direct output: {fps}")
+                    return fps
+                except ValueError:
+                    print(f"Could not parse fraction: {fps_str}")
+
+            print(f"Warning: Using default FPS value of {self.target_fps}")
+            return self.target_fps  # возвращаем целевой FPS как запасной вариант
         except Exception as e:
             print(f"Error while getting FPS: {e}")
+            print(f"Warning: Using default FPS value of {self.target_fps}")
             return self.target_fps
 
     def _get_video_duration(self, video_path):
@@ -200,6 +210,30 @@ class VideoProcessor:
         try:
             input_path = str(self.input_video_path)
             output_path = str(self.converted_video_path)
+
+            # Принудительно проверяем FPS входного видео
+            cmd = ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                   '-show_entries', 'stream=r_frame_rate', '-of', 'default=noprint_wrappers=1:nokey=1',
+                   input_path]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            fps_str = result.stdout.strip()
+
+            if '/' in fps_str:
+                try:
+                    numerator, denominator = map(int, fps_str.split('/'))
+                    actual_fps = numerator / denominator
+                    self.input_fps = actual_fps
+                    print(f"Detected input video FPS: {actual_fps}")
+                    self.needs_fps_conversion = abs(actual_fps - self.target_fps) > 0.01
+                except ValueError:
+                    print(f"Could not parse FPS fraction: {fps_str}")
+                    # Fallback to stored value
+
+            # Проверка настроек конвертации
+            if self.needs_fps_conversion:
+                print(f"Convert video from {self.input_fps} FPS to {self.target_fps} FPS")
+            else:
+                print(f"The original video already has the required frame rate ({self.target_fps} FPS)")
 
             has_gpu = self._check_gpu_availability()
 
