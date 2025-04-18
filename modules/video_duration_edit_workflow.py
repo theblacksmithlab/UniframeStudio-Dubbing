@@ -290,19 +290,19 @@ class VideoProcessor:
         has_gpu = self._check_gpu_availability()
 
         if has_gpu:
-            print("Using NVIDIA GPU to speed up conversion with maximum quality")
+            print("Using NVIDIA GPU to speed up segment extraction with maximum quality")
             encoder = 'h264_nvenc'
             pixel_format = 'yuv420p'
             quality_params = [
                 '-b:v', '100M',  # Very high bitrate
                 '-bufsize', '100M',  # Large buffer
-                '-rc', 'vbr_hq',  # High quality variable bitrate
+                '-rc', 'vbr',  # Changed from vbr_hq to vbr
                 '-rc-lookahead', '32',  # Maximum lookahead window
                 '-spatial_aq', '1',  # Spatial adaptive quantization
                 '-temporal_aq', '1',  # Temporal adaptive quantization
                 '-aq-strength', '15',  # Maximum adaptive quantization strength
-                '-nonref_p', '0',  # All P-frames are reference frames
-                '-weighted_pred', '1'  # Weighted prediction for better transitions
+                '-nonref_p', '0'  # All P-frames are reference frames
+                # Removed weighted_pred parameter
             ]
             preset = 'p7'  # Highest quality NVENC preset
             extra_params = ['-tune', 'hq']  # High quality tuning
@@ -371,6 +371,7 @@ class VideoProcessor:
                                 '-to', str(gap_end),
                                 '-c:v', encoder,
                                 '-b:v', '50M',
+                                '-rc', 'vbr',
                                 '-preset', 'p5',
                                 '-pix_fmt', pixel_format,
                                 '-an',
