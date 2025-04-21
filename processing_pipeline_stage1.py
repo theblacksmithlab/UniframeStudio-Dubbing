@@ -4,24 +4,23 @@ import argparse
 import subprocess
 import glob
 import sys
-import re
-import json
-from pathlib import Path
 
 
 def run_command(command):
+    print(f"Executing: {' '.join(command)}")
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-        return result.stdout
+        subprocess.run(command, check=True)
+        return True
     except subprocess.CalledProcessError as e:
         print(f"Command execution error: {e}")
-        print(f"Error output: {e.stderr}")
-        return None
+        return False
 
 
 def process_single_file(video_path, args):
     video_filename = os.path.basename(video_path)
     base_name = os.path.splitext(video_filename)[0]
+    output_dir = "output/timestamped_transcriptions"
+    os.makedirs(output_dir, exist_ok=True)
 
     print(f"\n{'=' * 50}")
     print(f"Processing file: {video_filename}")
@@ -29,123 +28,108 @@ def process_single_file(video_path, args):
 
     # Step 1: Extract audio
     print(f"\n[Step 1/6] Extracting audio from video {video_filename}...")
+    audio_path = f"audio_input/{base_name}.mp3"
     extract_cmd = [sys.executable, "cli.py", "extract_audio", "--input", video_path]
-    extract_output = run_command(extract_cmd)
 
-    # Parse the output to get the audio file path
-    audio_path = None
-    if extract_output:
-        match = re.search(r"saved in file: (.*?)$", extract_output, re.MULTILINE)
-        if match:
-            audio_path = match.group(1).strip()
-        else:
-            match = re.search(r"Audio successfully extracted: (.*?)$", extract_output, re.MULTILINE)
-            if match:
-                audio_path = match.group(1).strip()
+    if not run_command(extract_cmd):
+        print(f"Error: Failed to extract audio from {video_path}")
+        return False
 
-    if not audio_path or not os.path.exists(audio_path):
-        print(f"Error: Audio file was not created or not found.")
+    if not os.path.exists(audio_path):
+        print(f"Error: Expected audio file {audio_path} not created")
         return False
 
     print(f"Audio file created: {audio_path}")
 
     # Step 2: Transcription
     print(f"\n[Step 2/6] Transcribing audio {os.path.basename(audio_path)}...")
+    transcription_path = os.path.join(output_dir, f"{base_name}_transcribed.json")
     transcribe_cmd = [sys.executable, "cli.py", "transcribe", "--input", audio_path]
-    transcribe_output = run_command(transcribe_cmd)
 
-    transcription_path = None
-    if transcribe_output:
-        match = re.search(r"saved in file: (.*?)$", transcribe_output, re.MULTILINE)
-        if match:
-            transcription_path = match.group(1).strip()
-        else:
-            match = re.search(r"Result: (.*?)$", transcribe_output, re.MULTILINE)
-            if match:
-                transcription_path = match.group(1).strip()
+    if not run_command(transcribe_cmd):
+        print(f"Error: Failed to transcribe audio {audio_path}")
+        return False
 
-    if not transcription_path or not os.path.exists(transcription_path):
-        print(f"Error: Transcription file was not created or not found.")
+    if not os.path.exists(transcription_path):
+        print(f"Error: Expected transcription file {transcription_path} not created")
         return False
 
     print(f"Transcription file created: {transcription_path}")
 
+    # Step 3: Structure transcription
     print(f"\n[Step 3/6] Structuring transcription {os.path.basename(transcription_path)}...")
+    corrected_path = os.path.join(output_dir, f"{base_name}_transcribed_corrected.json")
     correct_cmd = [sys.executable, "cli.py", "correct", "--input", transcription_path]
 
     if args.start_timestamp is not None:
         correct_cmd.extend(["--start_timestamp", str(args.start_timestamp)])
 
-    correct_output = run_command(correct_cmd)
+    if not run_command(correct_cmd):
+        print(f"Error: Failed to structure transcription {transcription_path}")
+        return False
 
-    # Parse the output to get the corrected file path
-    corrected_path = None
-    if correct_output:
-        match = re.search(r"saved in file: (.*?)$", correct_output, re.MULTILINE)
-        if match:
-            corrected_path = match.group(1).strip()
-
-    if not corrected_path or not os.path.exists(corrected_path):
-        print(f"Error: Corrected transcription file was not created or not found.")
+    if not os.path.exists(corrected_path):
+        print(f"Error: Expected corrected file {corrected_path} not created")
         return False
 
     print(f"Corrected transcription file created: {corrected_path}")
 
     # Step 4: Clean transcription
     print(f"\n[Step 4/6] Cleaning transcription {os.path.basename(corrected_path)}...")
+    cleaned_path = os.path.join(output_dir, f"{base_name}_transcribed_corrected_cleaned.json")
     cleanup_cmd = [sys.executable, "cli.py", "cleanup", "--input", corrected_path]
-    cleanup_output = run_command(cleanup_cmd)
 
-    cleaned_path = None
-    if cleanup_output:
-        match = re.search(r"saved in file: (.*?)$", cleanup_output, re.MULTILINE)
-        if match:
-            cleaned_path = match.group(1).strip()
+    if not run_command(cleanup_cmd):
+        print(f"Error: Failed to clean transcription {corrected_path}")
+        return False
 
-    if not cleaned_path or not os.path.exists(cleaned_path):
-        print(f"Error: Cleaned transcription file was not created or not found.")
+    if not os.path.exists(cleaned_path):
+        print(f"Error: Expected cleaned file {cleaned_path} not created")
         return False
 
     print(f"Cleaned transcription file created: {cleaned_path}")
 
     # Step 5: Optimize segments
     print(f"\n[Step 5/6] Optimizing segments in transcription {os.path.basename(cleaned_path)}...")
-    optimize_cmd = [sys.executable, "cli.py", "optimize-segments", "--input", cleaned_path]
-    optimize_output = run_command(optimize_cmd)
+    optimized_path = os.path.join(output_dir, f"{base_name}_transcribed_corrected_cleaned_optimized.json")
+    optimize_cmd = [sys.executable, "cli.py", "optimize", "--input", cleaned_path]
 
-    optimized_path = None
-    if optimize_output:
-        match = re.search(r"saved in file: (.*?)$", optimize_output, re.MULTILINE)
-        if match:
-            optimized_path = match.group(1).strip()
+    if not run_command(optimize_cmd):
+        print(f"Error: Failed to optimize segments in {cleaned_path}")
+        return False
 
-    if not optimized_path or not os.path.exists(optimized_path):
-        print(f"Error: Optimized transcription file was not created or not found.")
+    if not os.path.exists(optimized_path):
+        print(f"Error: Expected optimized file {optimized_path} not created")
         return False
 
     print(f"Optimized transcription file created: {optimized_path}")
 
     # Step 6: Adjust timing
     print(f"\n[Step 6/6] Adjusting segment timing in transcription {os.path.basename(optimized_path)}...")
+    adjusted_path = os.path.join(output_dir, f"{base_name}_transcribed_corrected_cleaned_optimized_adjusted.json")
     adjust_cmd = [sys.executable, "cli.py", "adjust_timing", "--input", optimized_path]
-    adjust_output = run_command(adjust_cmd)
 
-    adjusted_path = None
-    if adjust_output:
-        match = re.search(r"saved in file: (.*?)$", adjust_output, re.MULTILINE)
-        if match:
-            adjusted_path = match.group(1).strip()
+    if not run_command(adjust_cmd):
+        print(f"Error: Failed to adjust timing in {optimized_path}")
+        return False
 
-    if not adjusted_path or not os.path.exists(adjusted_path):
-        print(f"Error: Adjusted transcription file was not created or not found.")
+    if not os.path.exists(adjusted_path):
+        print(f"Error: Expected adjusted file {adjusted_path} not created")
         return False
 
     print(f"Adjusted transcription file created: {adjusted_path}")
 
-    print(f"\nProcessing of file {video_filename} completed successfully!")
+    print("\n=================================================================")
+    print(f"First stage processing of file {video_filename} completed successfully!")
     print(f"Final result saved to {adjusted_path}")
     print(f"To translate, use the command:")
-    print(f"python cli.py translate --input {adjusted_path}")
+    print(f"python3 cli.py translate --input {adjusted_path}")
+
+    # Continue with second stage
+    print(f"Or run the full second stage processor with:")
+    print(f"python3 processing_pipeline_stage2.py --input {adjusted_path} --dealer elevenlabs")
+    print("=================================================================\n")
+
     return True
 
 
@@ -187,7 +171,9 @@ def main():
 
         if success_count > 0:
             print("\nTo translate files, run the command with the appropriate adjusted file path:")
-            print(f"python cli.py translate --input /path/to/adjusted_file.json")
+            print(f"python3 cli.py translate --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted.json")
+            print("\nOr run the second stage processor:")
+            print(f"python3 processing_pipeline_stage2.py --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted.json")
 
     elif os.path.isfile(args.input):
         success = process_single_file(args.input, args)

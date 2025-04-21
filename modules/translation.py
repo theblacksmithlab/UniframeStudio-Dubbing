@@ -46,15 +46,16 @@ def translate_transcript_segments(input_file, output_file=None):
 
             translated_text = response.choices[0].message.content.strip()
 
-            # translated_text = translated_text + " <end of the sentence />"
-
             segment["translated_text"] = translated_text
+            segment["initial_translation"] = translated_text
 
-            print(f"  -> Translated: {translated_text[:50]}...")
+            print(f"-> Translated: {translated_text[:50]}...")
 
         except Exception as e:
             print(f"Error translating segment {i}: {e}")
-            segment["translated_text"] = f"[ERROR] Failed to translate: {str(e)[:100]}"
+            error_message = f"[ERROR] Failed to translate: {str(e)[:100]}"
+            segment["translated_text"] = error_message
+            segment["initial_translation"] = error_message
 
     translated_full_text = " ".join([s.get("translated_text", "") for s in segments])
     transcript["translated_text"] = translated_full_text

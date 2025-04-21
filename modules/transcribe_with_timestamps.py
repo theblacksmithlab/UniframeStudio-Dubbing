@@ -1,5 +1,7 @@
 import json
 import os
+import shutil
+
 from pydub import AudioSegment
 from utils.audio_utils import split_audio
 import openai
@@ -12,7 +14,7 @@ def transcribe_audio_with_timestamps(input_audio):
     temp_audio_chunks_dir = "output/temp_audio_chunks"
     os.makedirs(timestamped_transcriptions_dir, exist_ok=True)
     os.makedirs(temp_audio_chunks_dir, exist_ok=True)
-    output_json = os.path.join(timestamped_transcriptions_dir, f"{base_name}_timestamped.json")
+    output_json = os.path.join(timestamped_transcriptions_dir, f"{base_name}_transcribed.json")
 
     chunk_paths = split_audio(input_audio, temp_audio_chunks_dir)
 
@@ -67,6 +69,9 @@ def transcribe_audio_with_timestamps(input_audio):
 
     with open(output_json, "w", encoding="utf-8") as f:
         json.dump(full_result, f, ensure_ascii=False, indent=2)
+
+    shutil.rmtree(temp_audio_chunks_dir)
+    print(f"Temporary chunks directory {temp_audio_chunks_dir} removed")
 
     print(f"Timestamped word-level transcription successfully finished! Result: {output_json}")
     return output_json
