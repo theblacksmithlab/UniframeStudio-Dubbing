@@ -72,7 +72,7 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
     print(
         f"  Start: {target_segment['start']}s, End: {target_segment['end']}s, Original Duration: {original_duration_sec}s")
 
-    temp_dir = "temp_audio_segments"
+    temp_dir = os.path.join(os.path.dirname(translation_file), "temp_audio_segments")
     os.makedirs(temp_dir, exist_ok=True)
 
     temp_file = os.path.join(temp_dir, f"segment_{segment_id}.mp3")
@@ -112,7 +112,7 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
             headers = {"xi-api-key": elevenlabs_api_key}
 
             response = make_api_request_with_retry(
-                f"https://api.elevenlabs.io/v1/text-to-speech/JDgAnGtjhmdCMmtbyRYK/stream",
+                f"https://api.elevenlabs.io/v1/text-to-speech/NPUmnbD9JPtvDjj0UYSZ/stream",
                 request_data,
                 headers
             )

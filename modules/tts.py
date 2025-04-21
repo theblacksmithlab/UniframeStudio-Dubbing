@@ -17,9 +17,9 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
     if output_audio_file is None:
         base_dir = os.path.dirname(translation_file)
-        base_name = os.path.splitext(os.path.basename(translation_file))[0]
-        # output_audio_file = os.path.join(base_dir, f"{base_name}.mp3")
-        output_audio_file = os.path.join(base_dir, f"en_audio.mp3")
+        audio_result_dir = os.path.join(base_dir, "audio_result")
+        os.makedirs(audio_result_dir, exist_ok=True)
+        output_audio_file = os.path.join(audio_result_dir, f"en_audio.mp3")
 
     os.makedirs(os.path.dirname(output_audio_file), exist_ok=True)
 
@@ -33,10 +33,10 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
     print(f"Uploaded {len(segments)} segments for voice-over using {dealer}")
 
-    segments_dir = os.path.join(os.path.dirname(output_audio_file), "audio_segments")
+    segments_dir = os.path.join(os.path.dirname(translation_file), "audio_segments")
     os.makedirs(segments_dir, exist_ok=True)
 
-    temp_dir = "temp_audio_segments"
+    temp_dir = os.path.join(os.path.dirname(translation_file), "temp_audio_segments")
     os.makedirs(temp_dir, exist_ok=True)
 
     generated_segments = []
@@ -111,7 +111,7 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
                 headers = {"xi-api-key": elevenlabs_api_key}
 
                 response = make_api_request_with_retry(
-                    f"https://api.elevenlabs.io/v1/text-to-speech/JDgAnGtjhmdCMmtbyRYK/stream",
+                    f"https://api.elevenlabs.io/v1/text-to-speech/NPUmnbD9JPtvDjj0UYSZ/stream",
                     request_data,
                     headers
                 )
@@ -119,10 +119,10 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
                 current_request_id = response.headers.get("request-id")
                 if current_request_id:
                     generate_tts_for_segments.segment_request_ids[i] = current_request_id
-                    print(f"  Got request_id: {current_request_id}")
+                    print(f"Got request_id: {current_request_id}")
                     data["segments"][i]["request_id"] = current_request_id
                 else:
-                    print("  Warning: No request_id received in response")
+                    print("Warning: No request_id received in response")
 
                 with open(temp_file, "wb") as f:
                     f.write(response.content)
@@ -143,14 +143,8 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
             precise_duration = get_precise_audio_duration(temp_file)
             actual_duration_ms = precise_duration * 1000
 
-            print(f"  Generated audio duration: {actual_duration_ms}ms")
+            print(f"Generated audio duration: {actual_duration_ms}ms")
             data["segments"][i]["tts_duration"] = round(actual_duration_ms / 1000, 6)
-
-            # speed_ratio = actual_duration_ms / original_duration_ms
-            # data["segments"][i]["speed_ratio"] = round(speed_ratio, 6)
-            #
-            # print(f"  Generated audio duration: {actual_duration_ms / 1000}s")
-            # print(f"  Speed ratio for video adjustment: {speed_ratio:.2f}x")
 
             diff_ratio = abs(actual_duration_ms - original_duration_ms) / original_duration_ms
             if diff_ratio > 0.2:
@@ -297,9 +291,9 @@ def assemble_audio_file(segments, output_file, intro=False, outro=False):
 def reassemble_audio_file(translation_file, output_audio_file=None, intro=False, outro=False):
     if output_audio_file is None:
         base_dir = os.path.dirname(translation_file)
-        base_name = os.path.splitext(os.path.basename(translation_file))[0]
-        # output_audio_file = os.path.join(base_dir, f"{base_name}_reassembled.mp3")
-        output_audio_file = os.path.join(base_dir, f"en_audio.mp3")
+        audio_result_dir = os.path.join(base_dir, "audio_result")
+        os.makedirs(audio_result_dir, exist_ok=True)
+        output_audio_file = os.path.join(audio_result_dir, f"en_audio_reassembled.mp3")
 
     with open(translation_file, "r", encoding="utf-8") as f:
         data = json.load(f)

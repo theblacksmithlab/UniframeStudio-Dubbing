@@ -13,6 +13,7 @@ from modules.tts_correction import regenerate_segment
 from modules.video_duration_edit_workflow import VideoProcessor
 from modules.video_to_audio_conversion import extract_audio
 from modules.optimized_segmentation import optimize_transcription_segments
+from modules.automatic_text_correction import correct_segment_durations
 
 
 def main():
@@ -52,7 +53,7 @@ def main():
     cleanup_parser.add_argument("--output", "-o", help="Path to save cleaned transcription (optional)")
 
     # Sub-parser for optimizing segments to sentences
-    optimize_parser = subparsers.add_parser("optimize-segments",
+    optimize_parser = subparsers.add_parser("optimize",
                                             help="Optimize transcription by breaking segments into sentences")
     optimize_parser.add_argument("--input", "-i", required=True,
                                  help="Path to the cleaned-up transcription")
@@ -100,6 +101,19 @@ def main():
                                     help="TTS service provider (default: openai)")
     segment_tts_parser.add_argument("--voice", "-v", default="onyx",
                                     help="Voice for dubbing (only used for OpenAI, default: onyx)")
+
+    text_correction_parser = subparsers.add_parser("auto-correct",
+                                                   help="Automatically correct text segments to match original duration")
+    text_correction_parser.add_argument("--input", "-i", required=True,
+                                        help="Path to translated transcription file with TTS data")
+    text_correction_parser.add_argument("--attempts", "-a", type=int, default=5,
+                                        help="Maximum number of correction attempts (default: 5)")
+    text_correction_parser.add_argument("--threshold", "-t", type=float, default=0.2,
+                                        help="Duration difference threshold for correction (default: 0.2 or 20%)")
+    text_correction_parser.add_argument("--dealer", "-d", default="openai", choices=["openai", "elevenlabs"],
+                                        help="TTS service provider (default: openai)")
+    text_correction_parser.add_argument("--voice", "-v", default="onyx",
+                                        help="Voice for dubbing (only used for OpenAI, default: onyx)")
 
     # Add a new sub-parser for reassembling audio from existing segments
     reassemble_parser = subparsers.add_parser("reassemble",
@@ -174,7 +188,7 @@ def main():
             print(f"Error cleaning-up: {e}")
             return
 
-    elif args.command == "optimize-segments":
+    elif args.command == "optimize":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
             return
@@ -265,6 +279,27 @@ def main():
             traceback.print_exc()
             return
 
+    elif args.command == "auto-correct":
+        if not os.path.exists(args.input):
+            print(f"Error: Transcription file {args.input} not found.")
+            return
+
+        print(f"Automatically correcting segment durations: {args.input}")
+        try:
+            result_file = correct_segment_durations(
+                translation_file=args.input,
+                max_attempts=args.attempts,
+                threshold=args.threshold,
+                voice=args.voice,
+                dealer=args.dealer
+            )
+            print(f"Automatic text correction completed successfully. The result was saved in file: {result_file}")
+        except Exception as e:
+            print(f"Error during automatic text correction: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+
     elif args.command == "reassemble":
         if not os.path.exists(args.input):
             print(f"Error: Translation file {args.input} not found.")
@@ -295,7 +330,7 @@ def main():
             resources_dir = os.path.join(current_dir, "resources")
             input_video = os.path.join(input_dir, "input.mp4")
             json_file = os.path.join(current_dir, "output", "timestamped_transcriptions",
-                                     "input_timestamped_corrected_cleaned_optimized_adjusted_translated.json")
+                                     "input_transcribed_corrected_cleaned_optimized_adjusted_translated.json")
             output_video = os.path.join(output_dir, "output.mp4")
             intro_outro = os.path.join(resources_dir, "intro_outro_converted.mp4")
 

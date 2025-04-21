@@ -3,6 +3,114 @@ import os
 import re
 
 
+def split_into_sentences(text):
+    # Protect dots in abbreviations and domains
+    text = re.sub(r'(\b\w\.\w\.)', lambda m: m.group(0).replace('.', '<DOT>'), text)
+    text = re.sub(r'(\b[\w-]+\.[a-zA-Z]{2,})', lambda m: m.group(0).replace('.', '<DOT>'), text)
+
+    sentences = []
+    current = ""
+    i = 0
+
+    while i < len(text):
+        current += text[i]
+
+        # Check for end of sentence
+        if text[i] in ['.', '!', '?'] and current.strip():
+            # Not a decimal number
+            if not re.search(r'\d\.$', current.strip()):
+                # Check for space and capital letter after punctuation
+                if i + 2 < len(text) and text[i + 1].isspace() and text[i + 2].isupper():
+                    sentences.append(current.strip())
+                    current = ""
+                # Or end of text
+                elif i + 1 >= len(text):
+                    sentences.append(current.strip())
+                    current = ""
+
+        i += 1
+
+    # Add the last sentence if any
+    if current.strip():
+        sentences.append(current.strip())
+
+    # Restore protected dots
+    sentences = [s.replace('<DOT>', '.') for s in sentences]
+
+    return sentences
+
+
+def find_word_in_words_list(target_word, words_list, start_time, end_time, position="first"):
+    target_word = target_word.lower().strip()
+
+    # Remove punctuation for matching
+    clean_target = re.sub(r'[^\w\s]', '', target_word)
+
+    # Find all occurrences of the word within the time range
+    candidates = []
+    for word_info in words_list:
+        word = word_info.get("word", "").lower().strip()
+        word_time = word_info.get("start", 0) if position == "first" else word_info.get("end", 0)
+
+        # Remove punctuation for matching
+        clean_word = re.sub(r'[^\w\s]', '', word)
+
+        # Check if words match and time is within range
+        if clean_word == clean_target and start_time <= word_time <= end_time:
+            candidates.append(word_info)
+
+    if not candidates:
+        return None
+
+    # For first word, return the one with earliest start time
+    # For last word, return the one with latest end time
+    if position == "first":
+        return min(candidates, key=lambda x: x.get("start", 0))
+    else:
+        return max(candidates, key=lambda x: x.get("end", 0))
+
+
+def get_sentence_timestamps(sentence, segment, words_list):
+    sentence = sentence.strip()
+    if not sentence:
+        return None
+
+    # Get first and last words of the sentence
+    first_word_match = re.search(r'\b(\w+)', sentence)
+    last_word_match = re.search(r'\b(\w+)\W*$', sentence)
+
+    if not first_word_match or not last_word_match:
+        return None
+
+    first_word = first_word_match.group(1).lower()
+    last_word = last_word_match.group(1).lower()
+
+    segment_start = segment.get("start", 0)
+    segment_end = segment.get("end", 0)
+
+    # Find the first word in the words list
+    first_word_info = find_word_in_words_list(
+        first_word, words_list, segment_start, segment_end, "first"
+    )
+
+    # Find the last word in the words list
+    last_word_info = find_word_in_words_list(
+        last_word, words_list, segment_start, segment_end, "last"
+    )
+
+    if not first_word_info or not last_word_info:
+        # Fallback: use segment timestamps if word detection fails
+        return {
+            "start": segment_start,
+            "end": segment_end
+        }
+
+    return {
+        "start": first_word_info.get("start", segment_start),
+        "end": last_word_info.get("end", segment_end)
+    }
+
+
 def optimize_transcription_segments(transcription_file, output_file=None, min_segment_length=60):
     with open(transcription_file, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -11,396 +119,145 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
         base_name = os.path.splitext(transcription_file)[0]
         output_file = f"{base_name}_optimized.json"
 
-    full_text = data["text"]
-    original_segments = data.get("segments", [])
-    words_with_times = data.get("words", [])
+    segments = data.get("segments", [])
+    words_list = data.get("words", [])
 
-    original_segments.sort(key=lambda x: x["start"])
+    print(f"Optimizing {len(segments)} segments...")
 
-    segment_time_map = {}
-    for segment in original_segments:
-        segment_time_map[segment["text"]] = {
-            "start": segment["start"],
-            "end": segment["end"]
-        }
+    # STEP 1: Split segments into sentences with proper timestamps
+    raw_segments = []
 
-    word_time_index = {}
-    sorted_words = sorted(words_with_times, key=lambda x: x["start"])
+    for segment in segments:
+        if "merged" in segment and segment["merged"]:
+            continue  # Skip merged segments
 
-    for word_info in sorted_words:
-        word_text = word_info["word"].lower()
-        if word_text not in word_time_index:
-            word_time_index[word_text] = []
-        word_time_index[word_text].append({
-            "start": word_info["start"],
-            "end": word_info["end"]
-        })
+        segment_text = segment.get("text", "").strip()
+        sentences = split_into_sentences(segment_text)
 
-    sentences = split_into_sentences(full_text)
-    print(f"Total sentences found: {len(sentences)}")
+        print(f"Segment {segment.get('id')}: Found {len(sentences)} sentences")
 
-    segment_sentence_map = {}
-    for segment in original_segments:
-        segment_sentences = split_into_sentences(segment["text"])
-        for s in segment_sentences:
-            if s not in segment_sentence_map:
-                segment_sentence_map[s] = []
-            segment_sentence_map[s].append({
-                "start": segment["start"],
-                "end": segment["end"],
-                "original_segment": segment
-            })
-
-    sentence_times = []
-
-    timeline = []
-    for segment in original_segments:
-        timeline.append({"time": segment["start"], "type": "start", "segment": segment})
-        timeline.append({"time": segment["end"], "type": "end", "segment": segment})
-
-    timeline.sort(key=lambda x: x["time"])
-
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if not sentence:
-            continue
-
-        times = None
-
-        if sentence in segment_time_map:
-            times = segment_time_map[sentence]
-        elif sentence in segment_sentence_map:
-            segment_times = segment_sentence_map[sentence][0]
-            times = {
-                "start": segment_times["start"],
-                "end": segment_times["end"]
-            }
-        else:
-            times = find_sentence_times_by_words(sentence, word_time_index, sorted_words, timeline)
-
-        if not times:
-            times = find_segment_times_for_sentence(sentence, original_segments)
-
-        if times:
-            if times["start"] > times["end"]:
-                print(f"Warning: Invalid timestamps for sentence: {sentence[:50]}...")
-                print(f"  start: {times['start']}, end: {times['end']}")
-                times["start"], times["end"] = min(times["start"], times["end"]), max(times["start"], times["end"])
-
-            sentence_times.append({
-                "text": sentence,
-                "start": times["start"],
-                "end": times["end"]
+        if len(sentences) <= 1:
+            # If there's only one sentence, keep the segment as is
+            raw_segments.append({
+                "start": segment.get("start", 0),
+                "end": segment.get("end", 0),
+                "text": segment_text
             })
         else:
-            print(f"Warning: Could not find timestamps for sentence: {sentence[:50]}...")
+            # Process multiple sentences in the segment
+            for sentence in sentences:
+                # Get accurate timestamps for the sentence
+                timestamps = get_sentence_timestamps(sentence, segment, words_list)
 
-    for i in range(len(sentence_times)):
-        if sentence_times[i]["start"] > sentence_times[i]["end"]:
-            print(f"Fixing inverted labels for: {sentence_times[i]['text'][:30]}...")
-            sentence_times[i]["start"], sentence_times[i]["end"] = sentence_times[i]["end"], sentence_times[i]["start"]
+                if not timestamps:
+                    print(f"Warning: Could not find timestamps for sentence: {sentence[:30]}...")
+                    continue
 
-    sentence_times.sort(key=lambda x: x["start"])
+                # Validate timestamps (ensure start < end)
+                if timestamps["start"] > timestamps["end"]:
+                    print(f"Warning: Invalid timestamps for sentence: {sentence[:30]}...")
+                    timestamps["start"], timestamps["end"] = timestamps["end"], timestamps["start"]
 
-    for i in range(1, len(sentence_times)):
-        if abs(sentence_times[i]["start"] - sentence_times[i - 1]["start"]) < 0.01:
-            sentence_times[i]["start"] = sentence_times[i - 1]["end"] + 0.01
+                raw_segments.append({
+                    "start": timestamps["start"],
+                    "end": timestamps["end"],
+                    "text": sentence
+                })
 
-    new_segments = []
+    # Sort raw segments by start time
+    raw_segments.sort(key=lambda x: x["start"])
+
+    # STEP 2: Merge short segments to meet minimum length requirement
+    merged_segments = []
     current_text = ""
     current_start = None
     current_end = None
 
-    for sent_info in sentence_times:
-        sentence = sent_info["text"]
+    for segment in raw_segments:
+        text = segment["text"]
 
+        # If we don't have current segment or the current is already long enough
         if not current_text or len(current_text) >= min_segment_length:
+            # Save the previous segment if it exists
             if current_text:
-                new_segments.append({
-                    "id": len(new_segments),
+                merged_segments.append({
                     "start": current_start,
                     "end": current_end,
                     "text": current_text
                 })
 
-            current_text = sentence
-            current_start = sent_info["start"]
-            current_end = sent_info["end"]
+            # Start new segment
+            current_text = text
+            current_start = segment["start"]
+            current_end = segment["end"]
         else:
-            current_text += " " + sentence
-            current_end = sent_info["end"]
+            # Current segment is too short, append this segment to it
+            current_text += " " + text
+            current_end = segment["end"]
 
+    # Add the last segment if any
     if current_text:
-        new_segments.append({
-            "id": len(new_segments),
+        merged_segments.append({
             "start": current_start,
             "end": current_end,
             "text": current_text
         })
 
-    new_segments.sort(key=lambda x: x["start"])
+    print(f"After merging short segments: {len(merged_segments)} segments")
 
-    for i, segment in enumerate(new_segments):
-        segment["id"] = i
+    # STEP 3: Assign IDs and fix any overlapping segments
+    new_segments = []
+    for i, segment in enumerate(merged_segments):
+        new_segments.append({
+            "id": i,
+            "start": segment["start"],
+            "end": segment["end"],
+            "text": segment["text"]
+        })
 
+    # Fix overlapping segments
     for i in range(len(new_segments) - 1):
         if new_segments[i]["end"] > new_segments[i + 1]["start"]:
             midpoint = (new_segments[i]["end"] + new_segments[i + 1]["start"]) / 2
             new_segments[i]["end"] = midpoint
             new_segments[i + 1]["start"] = midpoint
+            print(f"Fixed overlap between segments {i} and {i + 1}")
 
-    for i in range(len(new_segments)):
-        if new_segments[i]["start"] > new_segments[i]["end"]:
-            print(f"Fixing inverted labels for segment {i}")
-            new_segments[i]["start"], new_segments[i]["end"] = new_segments[i]["end"], new_segments[i]["start"]
+    # Check for minimum segment duration
+    MIN_DURATION = 0.5  # seconds
+    for i, segment in enumerate(new_segments):
+        duration = segment["end"] - segment["start"]
+        if duration < MIN_DURATION:
+            print(f"Warning: Segment {i} duration is too short ({duration:.2f}s): {segment['text'][:30]}...")
 
+            # Try to extend by borrowing time from adjacent segments
+            if i > 0 and i < len(new_segments) - 1:
+                # Get time from both previous and next
+                borrow_time = (MIN_DURATION - duration) / 2
+                new_segments[i - 1]["end"] -= borrow_time
+                new_segments[i + 1]["start"] += borrow_time
+                new_segments[i]["start"] -= borrow_time
+                new_segments[i]["end"] += borrow_time
+            elif i > 0:
+                # Get time from previous
+                new_segments[i - 1]["end"] -= (MIN_DURATION - duration)
+                new_segments[i]["start"] -= (MIN_DURATION - duration)
+            elif i < len(new_segments) - 1:
+                # Get time from next
+                new_segments[i + 1]["start"] += (MIN_DURATION - duration)
+                new_segments[i]["end"] += (MIN_DURATION - duration)
+
+    # Prepare the result
     result = {
-        "text": data["text"],
+        "text": data.get("text", ""),
         "segments": new_segments
     }
 
+    # Save the result
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
-    print(f"Optimized transcription is saved in file: {output_file}")
-    print(f"Total original segments: {len(original_segments)}, New segments: {len(new_segments)}")
+    print(f"Optimization complete! {len(new_segments)} segments created.")
+    print(f"Result saved to: {output_file}")
 
-    check_segment_overlaps(output_file)
     return output_file
-
-
-def find_sentence_times_by_words(sentence, word_time_index, words_with_times, timeline=None):
-    import re
-
-    sentence = sentence.strip().lower()
-    words = re.findall(r'\b\w+\b', sentence)
-
-    if not words:
-        return None
-
-    first_word = words[0]
-    last_word = words[-1]
-
-    first_word_times = None
-    last_word_times = None
-
-    if first_word in word_time_index:
-        word_occurrences = sorted(word_time_index[first_word], key=lambda x: x["start"])
-        for time_info in word_occurrences:
-            context_before = get_word_context(time_info["start"], words_with_times, -5, 0)
-            if is_sentence_beginning(context_before):
-                first_word_times = time_info
-                break
-
-        if not first_word_times and word_occurrences:
-            first_word_times = word_occurrences[0]
-
-    if last_word in word_time_index:
-        word_occurrences = sorted(word_time_index[last_word], key=lambda x: x["end"])
-        for time_info in word_occurrences:
-            context_after = get_word_context(time_info["end"], words_with_times, 0, 5)
-            if is_sentence_ending(context_after):
-                last_word_times = time_info
-                break
-
-        if not last_word_times and word_occurrences:
-            last_word_times = word_occurrences[-1]
-
-    if first_word_times and last_word_times:
-        if first_word_times["start"] <= last_word_times["end"]:
-            return {
-                "start": first_word_times["start"],
-                "end": last_word_times["end"]
-            }
-        else:
-            print(f"Warning: Timestamps overlap for sentence: '{sentence[:30]}...'")
-            print(f"  Start: {first_word_times['start']}, End: {last_word_times['end']}")
-            return {
-                "start": min(first_word_times["start"], last_word_times["end"]),
-                "end": max(first_word_times["start"], last_word_times["end"])
-            }
-
-    if timeline:
-        found_segments = find_segments_containing_words(words, word_time_index, timeline)
-        if found_segments:
-            return {
-                "start": min(s["start"] for s in found_segments),
-                "end": max(s["end"] for s in found_segments)
-            }
-
-    all_times = []
-    for word in words:
-        if word in word_time_index:
-            for time_info in word_time_index[word]:
-                all_times.append(time_info)
-
-    if all_times:
-        all_times.sort(key=lambda x: x["start"])
-        return {
-            "start": all_times[0]["start"],
-            "end": all_times[-1]["end"]
-        }
-
-    return None
-
-
-def find_segments_containing_words(words, word_time_index, timeline):
-    relevant_times = []
-
-    for word in words:
-        if word in word_time_index:
-            for time_info in word_time_index[word]:
-                containing_segments = []
-                current_segments = []
-
-                for event in timeline:
-                    if event["type"] == "start":
-                        current_segments.append(event["segment"])
-                    elif event["type"] == "end" and event["segment"] in current_segments:
-                        current_segments.remove(event["segment"])
-
-                    if time_info["start"] >= event["time"] and current_segments:
-                        containing_segments = list(current_segments)
-
-                if containing_segments:
-                    for segment in containing_segments:
-                        relevant_times.append({
-                            "start": segment["start"],
-                            "end": segment["end"]
-                        })
-
-    return relevant_times
-
-
-def get_word_context(time_point, words_with_times, offset_before, offset_after):
-    closest_index = None
-    min_diff = float('inf')
-
-    for i, word_info in enumerate(words_with_times):
-        if abs(word_info["start"] - time_point) < min_diff:
-            min_diff = abs(word_info["start"] - time_point)
-            closest_index = i
-
-    if closest_index is None:
-        return []
-
-    start_idx = max(0, closest_index + offset_before)
-    end_idx = min(len(words_with_times) - 1, closest_index + offset_after)
-
-    return words_with_times[start_idx:end_idx + 1]
-
-
-def is_sentence_beginning(context_words):
-    if not context_words:
-        return True
-
-    last_word = context_words[-1]["word"] if context_words else ""
-    return last_word.endswith(('.', '!', '?')) or not context_words
-
-
-def is_sentence_ending(context_words):
-    if not context_words:
-        return True
-
-    first_word = context_words[0]["word"] if context_words else ""
-    return first_word[0].isupper() if first_word else True
-
-
-def split_into_sentences(text):
-    text = re.sub(r'(\b\w\.\w\.)', lambda m: m.group(0).replace('.', '<DOT>'), text)
-
-    sentences = []
-    current = ""
-
-    for char in text:
-        current += char
-        if char in ['.', '!', '?'] and current.strip():
-            if not re.search(r'\d\.$', current.strip()):
-                sentences.append(current.strip())
-                current = ""
-
-    if current.strip():
-        sentences.append(current.strip())
-
-    sentences = [s.replace('<DOT>', '.') for s in sentences]
-
-    return sentences
-
-
-def find_segment_times_for_sentence(sentence, segments):
-    sentence = sentence.strip()
-
-    for segment in segments:
-        if segment["text"].strip() == sentence:
-            return {
-                "start": segment["start"],
-                "end": segment["end"]
-            }
-
-    for segment in segments:
-        if sentence in segment["text"]:
-            return {
-                "start": segment["start"],
-                "end": segment["end"]
-            }
-
-    containing_segments = []
-    for segment in segments:
-        clean_segment = re.sub(r'[^\w\s]', ' ', segment["text"].lower())
-        clean_sentence = re.sub(r'[^\w\s]', ' ', sentence.lower())
-
-        segment_words = set(clean_segment.split())
-        sentence_words = set(clean_sentence.split())
-
-        intersection = segment_words.intersection(sentence_words)
-        if len(intersection) > len(sentence_words) / 2:
-            containing_segments.append(segment)
-
-    if containing_segments:
-        start_time = min(s["start"] for s in containing_segments)
-        end_time = max(s["end"] for s in containing_segments)
-
-        return {
-            "start": start_time,
-            "end": end_time
-        }
-
-    for segment in segments:
-        sentence_words = set(re.sub(r'[^\w\s]', ' ', sentence.lower()).split())
-        segment_words = set(re.sub(r'[^\w\s]', ' ', segment["text"].lower()).split())
-
-        if sentence_words.intersection(segment_words):
-            return {
-                "start": segment["start"],
-                "end": segment["end"]
-            }
-
-    return None
-
-
-def check_segment_overlaps(json_file):
-    with open(json_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
-    segments = data.get('segments', [])
-    if not segments:
-        print("File doesn't contain any segments to check.")
-        return True
-
-    overlaps_found = False
-
-    for i in range(len(segments) - 1):
-        current_segment = segments[i]
-        next_segment = segments[i + 1]
-
-        if current_segment["end"] > next_segment["start"]:
-            print(f"WARNING! Segment overlap detected:")
-            print(f"  Segment {current_segment['id']} (end: {current_segment['end']}) overlaps")
-            print(f"  Segment {next_segment['id']} (start: {next_segment['start']})")
-            print(f"  Overlap: {current_segment['end'] - next_segment['start']:.2f} seconds")
-            overlaps_found = True
-
-    if not overlaps_found:
-        print("Check completed: No segment overlaps detected.")
-
-    return not overlaps_found
