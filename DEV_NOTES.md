@@ -95,3 +95,11 @@ Args:
 
 # Edit original video duration with tts_duration info with 25 fps converting:
 python3 cli.py process_video
+
+=================================================================
+
+## W3A processing steps:
+
+python3 processing_pipeline_stage1.py --input video_input/input.mp4 --start_timestamp 4.0
+
+python3 processing_pipeline_stage2.py --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted.json --dealer elevenlabs --intro --outro

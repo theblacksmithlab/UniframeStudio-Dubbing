@@ -2,7 +2,6 @@ import json
 import os
 import re
 
-
 def split_into_sentences(text):
     # Protect dots in abbreviations and domains
     text = re.sub(r'(\b\w\.\w\.)', lambda m: m.group(0).replace('.', '<DOT>'), text)
@@ -40,78 +39,130 @@ def split_into_sentences(text):
     return sentences
 
 
-def find_word_in_words_list(target_word, words_list, start_time, end_time, position="first"):
-    target_word = target_word.lower().strip()
+def find_exact_sequence(sentence, words_list, segment_start, segment_end):
+    """
+    Find exact sequence of words from sentence in words_list and return timestamps.
+    Uses a sliding window approach to find the best match.
 
-    # Remove punctuation for matching
-    clean_target = re.sub(r'[^\w\s]', '', target_word)
+    Args:
+        sentence: The sentence to find
+        words_list: List of words with timestamps
+        segment_start: Start time of segment
+        segment_end: End time of segment
 
-    # Find all occurrences of the word within the time range
-    candidates = []
-    for word_info in words_list:
-        word = word_info.get("word", "").lower().strip()
-        word_time = word_info.get("start", 0) if position == "first" else word_info.get("end", 0)
+    Returns:
+        dict with start and end timestamps
+    """
+    # Extract words from the sentence
+    sentence_words = [w.lower() for w in re.findall(r'\b(\w+)\b', sentence)]
+    if not sentence_words:
+        return {"start": segment_start, "end": segment_end}
 
-        # Remove punctuation for matching
+    print(f"DEBUG: Finding exact sequence for sentence with {len(sentence_words)} words")
+    print(f"DEBUG: First few words: {sentence_words[:3]}")
+    print(f"DEBUG: Last few words: {sentence_words[-3:]}")
+
+    # Filter words_list to only include words in the time range
+    filtered_words = [w for w in words_list if segment_start <= w.get("start", 0) <= segment_end]
+
+    # Clean words in the list for comparison
+    clean_words = []
+    for word_info in filtered_words:
+        word = word_info.get("word", "").lower()
         clean_word = re.sub(r'[^\w\s]', '', word)
+        clean_words.append(clean_word)
 
-        # Check if words match and time is within range
-        if clean_word == clean_target and start_time <= word_time <= end_time:
-            candidates.append(word_info)
+    # We'll use a sliding window to find the best match
+    best_match_start_idx = -1
+    best_match_end_idx = -1
+    best_match_score = -1
 
-    if not candidates:
-        return None
+    # Try each position in the filtered words as a potential starting point
+    for start_idx in range(len(filtered_words) - len(sentence_words) + 1):
+        match_score = 0
 
-    # For first word, return the one with earliest start time
-    # For last word, return the one with latest end time
-    if position == "first":
-        return min(candidates, key=lambda x: x.get("start", 0))
-    else:
-        return max(candidates, key=lambda x: x.get("end", 0))
+        # Compare words from this starting point with sentence words
+        for i in range(min(len(sentence_words), len(filtered_words) - start_idx)):
+            clean_sentence_word = re.sub(r'[^\w\s]', '', sentence_words[i])
+            if not clean_sentence_word:  # Skip empty words
+                continue
+
+            if clean_words[start_idx + i] == clean_sentence_word:
+                match_score += 1
+
+        # Calculate match percentage
+        match_percentage = match_score / len(sentence_words)
+
+        if match_percentage > best_match_score:
+            best_match_score = match_percentage
+            best_match_start_idx = start_idx
+            best_match_end_idx = start_idx + min(len(sentence_words), len(filtered_words) - start_idx) - 1
+
+    print(f"DEBUG: Best match score: {best_match_score:.2f}")
+
+    # If match score is too low, fall back to segment timestamps
+    if best_match_score < 0.5:  # Require at least 50% match
+        print(f"DEBUG: Match score too low, using segment timestamps")
+        return {"start": segment_start, "end": segment_end}
+
+    # Get timestamps from the best match
+    start_time = filtered_words[best_match_start_idx].get("start", segment_start)
+    end_time = filtered_words[best_match_end_idx].get("end", segment_end)
+
+    print(f"DEBUG: Found sequence: start={start_time}, end={end_time}")
+    print(
+        f"DEBUG: From word '{filtered_words[best_match_start_idx].get('word')}' to '{filtered_words[best_match_end_idx].get('word')}'")
+
+    return {"start": start_time, "end": end_time}
 
 
 def get_sentence_timestamps(sentence, segment, words_list):
+    """
+    Get accurate start and end timestamps for a sentence within a segment
+    using exact sequence matching.
+    """
     sentence = sentence.strip()
     if not sentence:
         return None
 
-    # Get first and last words of the sentence
-    first_word_match = re.search(r'\b(\w+)', sentence)
-    last_word_match = re.search(r'\b(\w+)\W*$', sentence)
-
-    if not first_word_match or not last_word_match:
-        return None
-
-    first_word = first_word_match.group(1).lower()
-    last_word = last_word_match.group(1).lower()
-
     segment_start = segment.get("start", 0)
     segment_end = segment.get("end", 0)
 
-    # Find the first word in the words list
-    first_word_info = find_word_in_words_list(
-        first_word, words_list, segment_start, segment_end, "first"
-    )
+    print(f"DEBUG: Getting timestamps for sentence: '{sentence[:50]}...'")
 
-    # Find the last word in the words list
-    last_word_info = find_word_in_words_list(
-        last_word, words_list, segment_start, segment_end, "last"
-    )
+    # Find the exact sequence match
+    timestamps = find_exact_sequence(sentence, words_list, segment_start, segment_end)
 
-    if not first_word_info or not last_word_info:
-        # Fallback: use segment timestamps if word detection fails
+    # Add a small buffer to avoid exact overlaps
+    buffer = 0.01  # 10ms buffer
+
+    # Ensure timestamps are valid
+    if timestamps["start"] >= timestamps["end"]:
+        print(f"WARNING: Invalid timestamps, using segment with buffer")
         return {
             "start": segment_start,
             "end": segment_end
         }
 
-    return {
-        "start": first_word_info.get("start", segment_start),
-        "end": last_word_info.get("end", segment_end)
-    }
+    # Ensure minimum duration
+    min_duration = 0.5  # Half second minimum
+    if timestamps["end"] - timestamps["start"] < min_duration:
+        timestamps["end"] = timestamps["start"] + min_duration
+
+    # Ensure timestamps are within segment bounds
+    timestamps["start"] = max(timestamps["start"], segment_start)
+    timestamps["end"] = min(timestamps["end"], segment_end)
+
+    print(f"DEBUG: Final timestamps: start={timestamps['start']}, end={timestamps['end']}")
+
+    return timestamps
 
 
 def optimize_transcription_segments(transcription_file, output_file=None, min_segment_length=60):
+    """
+    Optimize transcription segments by splitting into proper sentences
+    with accurate timestamps.
+    """
     with open(transcription_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -153,11 +204,6 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
                     print(f"Warning: Could not find timestamps for sentence: {sentence[:30]}...")
                     continue
 
-                # Validate timestamps (ensure start < end)
-                if timestamps["start"] > timestamps["end"]:
-                    print(f"Warning: Invalid timestamps for sentence: {sentence[:30]}...")
-                    timestamps["start"], timestamps["end"] = timestamps["end"], timestamps["start"]
-
                 raw_segments.append({
                     "start": timestamps["start"],
                     "end": timestamps["end"],
@@ -166,6 +212,10 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
 
     # Sort raw segments by start time
     raw_segments.sort(key=lambda x: x["start"])
+
+    for i, segment in enumerate(raw_segments):
+        print(
+            f"DEBUG: Raw segment {i}: start={segment['start']}, end={segment['end']}, text='{segment['text'][:30]}...'")
 
     # STEP 2: Merge short segments to meet minimum length requirement
     merged_segments = []
@@ -222,30 +272,6 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
             new_segments[i]["end"] = midpoint
             new_segments[i + 1]["start"] = midpoint
             print(f"Fixed overlap between segments {i} and {i + 1}")
-
-    # Check for minimum segment duration
-    MIN_DURATION = 0.5  # seconds
-    for i, segment in enumerate(new_segments):
-        duration = segment["end"] - segment["start"]
-        if duration < MIN_DURATION:
-            print(f"Warning: Segment {i} duration is too short ({duration:.2f}s): {segment['text'][:30]}...")
-
-            # Try to extend by borrowing time from adjacent segments
-            if i > 0 and i < len(new_segments) - 1:
-                # Get time from both previous and next
-                borrow_time = (MIN_DURATION - duration) / 2
-                new_segments[i - 1]["end"] -= borrow_time
-                new_segments[i + 1]["start"] += borrow_time
-                new_segments[i]["start"] -= borrow_time
-                new_segments[i]["end"] += borrow_time
-            elif i > 0:
-                # Get time from previous
-                new_segments[i - 1]["end"] -= (MIN_DURATION - duration)
-                new_segments[i]["start"] -= (MIN_DURATION - duration)
-            elif i < len(new_segments) - 1:
-                # Get time from next
-                new_segments[i + 1]["start"] += (MIN_DURATION - duration)
-                new_segments[i]["end"] += (MIN_DURATION - duration)
 
     # Prepare the result
     result = {

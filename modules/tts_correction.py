@@ -14,6 +14,7 @@ from modules.tts import match_target_amplitude
 def regenerate_segment(translation_file, segment_id, output_audio_file=None, voice="onyx", dealer="openai"):
     load_dotenv()
     elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+    elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
 
     with open(translation_file, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -112,7 +113,7 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
             headers = {"xi-api-key": elevenlabs_api_key}
 
             response = make_api_request_with_retry(
-                f"https://api.elevenlabs.io/v1/text-to-speech/NPUmnbD9JPtvDjj0UYSZ/stream",
+                f"https://api.elevenlabs.io/v1/text-to-speech/{elevenlabs_voice_id}/stream",
                 request_data,
                 headers
             )
