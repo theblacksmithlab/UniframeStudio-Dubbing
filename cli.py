@@ -332,7 +332,7 @@ def main():
             json_file = os.path.join(current_dir, "output", "timestamped_transcriptions",
                                      "input_transcribed_corrected_cleaned_optimized_adjusted_translated.json")
             output_video = os.path.join(output_dir, "output.mp4")
-            intro_outro = os.path.join(resources_dir, "intro_outro_converted.mp4")
+            intro_outro = os.path.join(resources_dir, "intro_outro_25fps.mp4")
 
             os.makedirs(output_dir, exist_ok=True)
 

@@ -65,3 +65,5 @@ output_final.mp4
 video_output/
 video_duration_edit_workflow_reserve.py
 lessons_status.json
+resources/intro_outro.mp3
+resources/intro_outro_converted.mp4
