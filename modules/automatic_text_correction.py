@@ -41,10 +41,9 @@ def correct_text_through_api(current_text, original_duration, tts_duration, mode
     context_prompt = "\n".join(context_parts) + "\n" if context_parts else ""
 
     prompt = (f"{context_prompt}"
-              f"Current text to correct: {current_text}\n"
+              f"Current segment text to correct: {current_text}\n"
               f"Original duration: {original_duration:.3f} seconds\n"
-              f"TTS duration: {tts_duration:.3f} seconds\n"
-              f"Difference: {abs(percentage_diff):.1f}%")
+              f"TTS duration: {tts_duration:.3f} seconds\n")
 
     print(f"Prompt: {prompt}")
 

@@ -43,7 +43,7 @@ def correct_transcript_segments(input_file, output_file=None, start_timestamp=No
         transcript = json.load(f)
 
     segments = transcript.get('segments', [])
-    print(f"Loaded {len(segments)} segments for processing")
+    print(f"Loaded {len(segments)} segments for processing.")
 
     max_merges = len(segments)
 

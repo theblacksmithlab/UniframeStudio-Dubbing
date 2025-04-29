@@ -14,6 +14,7 @@ import subprocess
 def generate_tts_for_segments(translation_file, output_audio_file=None, voice="onyx", dealer="openai", intro=False, outro=False):
     load_dotenv()
     elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+    elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
 
     if output_audio_file is None:
         base_dir = os.path.dirname(translation_file)
@@ -111,7 +112,7 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
                 headers = {"xi-api-key": elevenlabs_api_key}
 
                 response = make_api_request_with_retry(
-                    f"https://api.elevenlabs.io/v1/text-to-speech/NPUmnbD9JPtvDjj0UYSZ/stream",
+                    f"https://api.elevenlabs.io/v1/text-to-speech/{elevenlabs_voice_id}/stream",
                     request_data,
                     headers
                 )
@@ -325,7 +326,7 @@ def reassemble_audio_file(translation_file, output_audio_file=None, intro=False,
                 "end_time_ms": end_time_ms,
                 "file": segment_file
             })
-            print(f"Found segment {i} at {segment_file}")
+            # print(f"Found segment {i} at {segment_file}")
         else:
             missing_segments.append(i)
 
@@ -352,15 +353,15 @@ def make_api_request_with_retry(url, data, headers, max_retries=10, retry_delay=
             if response.status_code == 200:
                 return response
             else:
-                print(f"  API error (attempt {retries + 1}/{max_retries}): {response.status_code} - {response.text}")
+                print(f"API error (attempt {retries + 1}/{max_retries}): {response.status_code} - {response.text}")
         except (requests.RequestException, TimeoutError, ConnectionError, ssl.SSLError) as e:
             last_exception = e
-            print(f"  Request failed (attempt {retries + 1}/{max_retries}): {e}")
+            print(f"Request failed (attempt {retries + 1}/{max_retries}): {e}")
 
         retries += 1
         if retries < max_retries:
             sleep_time = retry_delay * retries
-            print(f"  Retrying in {sleep_time} seconds...")
+            print(f"Retrying in {sleep_time} seconds...")
             time.sleep(sleep_time)
 
     raise Exception(f"Failed after {max_retries} attempts. Last error: {last_exception}")

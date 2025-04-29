@@ -45,7 +45,7 @@ def main():
     correct_parser.add_argument("--start_timestamp", "-st", type=float,
                                 help="Set specific start timestamp for the first segment (e.g. 0.0 or 4.0)")
 
-    # Sub-parse for clearing segments command
+    # Sub-parser for clearing segments command
     cleanup_parser = subparsers.add_parser("cleanup",
                                            help="Clean-up segments (deletes merged and removes extra spaces)")
     cleanup_parser.add_argument("--input", "-i", required=True,
@@ -71,8 +71,8 @@ def main():
                                   help="Path to time-adjusted transcription file")
     translate_parser.add_argument("--output", "-o",
                                   help="Path to save translated transcription (optional)")
-    translate_parser.add_argument("--model", "-m", default="gpt-4o-mini",
-                                  help="Translation model (default: gpt-4o-mini)")
+    translate_parser.add_argument("--model", "-m", default="gpt-4o",
+                                  help="Translation model (default: gpt-4o)")
 
     # Sub-parser for the segment voicing over command
     tts_parser = subparsers.add_parser("tts", help="Voices over translated segments")
