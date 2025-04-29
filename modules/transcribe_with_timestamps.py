@@ -58,8 +58,7 @@ def transcribe_audio_with_timestamps(input_audio):
                 "id": word_id,
                 "start": word.get("start", 0) + time_offset,
                 "end": word.get("end", 0) + time_offset,
-                "word": word.get("word", ""),
-                "probability": word.get("probability", 0)
+                "word": word.get("word", "")
             }
             word_id += 1
             full_result["words"].append(simplified_word)
@@ -73,7 +72,7 @@ def transcribe_audio_with_timestamps(input_audio):
     shutil.rmtree(temp_audio_chunks_dir)
     print(f"Temporary chunks directory {temp_audio_chunks_dir} removed")
 
-    print(f"Timestamped word-level transcription successfully finished! Result: {output_json}")
+    print(f"Timestamped transcription successfully finished! Result: {output_json}")
     return output_json
 
 
@@ -115,8 +114,7 @@ def transcribe(file_path):
                 word_dict = {
                     "word": getattr(word, "word", ""),
                     "start": getattr(word, "start", 0),
-                    "end": getattr(word, "end", 0),
-                    "probability": getattr(word, "probability", 0)
+                    "end": getattr(word, "end", 0)
                 }
                 result["words"].append(word_dict)
 

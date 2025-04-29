@@ -71,7 +71,7 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
 
     print(f"Regenerating segment {segment_id}: '{text[:30]}...'")
     print(
-        f"  Start: {target_segment['start']}s, End: {target_segment['end']}s, Original Duration: {original_duration_sec}s")
+        f"Start: {target_segment['start']}s, End: {target_segment['end']}s, Original Duration: {original_duration_sec}s")
 
     temp_dir = os.path.join(os.path.dirname(translation_file), "temp_audio_segments")
     os.makedirs(temp_dir, exist_ok=True)
@@ -145,7 +145,7 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
         precise_duration = get_precise_audio_duration(temp_file)
         actual_duration_ms = precise_duration * 1000
 
-        print(f"  Generated audio duration: {precise_duration:.6f}s ({actual_duration_ms:.2f}ms)")
+        print(f"Generated audio duration: {precise_duration:.6f}s ({actual_duration_ms:.2f}ms)")
 
         data["segments"][segment_index]["tts_duration"] = round(precise_duration, 6)
 
