@@ -38,14 +38,14 @@ mkdir -p python
 cd python || exit 1
 
 # 7. Clone the repository if it hasn't been cloned already
-if [ ! -d "smart_dubbing" ]; then
+if [ ! -d "uniframe_studio" ]; then
     git clone https://github.com/0xthecableguy/smart_dubbing.git
 else
-    echo "[INFO] Repository smart_dubbing already exists"
+    echo "[INFO] Uniframe_studio repository already exists"
 fi
 
 # 8. Navigate into the smart_dubbing repository
-cd smart_dubbing || exit 1
+cd uniframe_studio || exit 1
 
 # 9. Create virtual environment
 python3 -m venv venv

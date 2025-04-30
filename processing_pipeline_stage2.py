@@ -125,7 +125,7 @@ def main():
                         help="Path to the JSON file from the first stage (after adjustment)")
     parser.add_argument("--model", "-m", default="gpt-4o",
                         help="Translation model (default: gpt-4o)")
-    parser.add_argument("--dealer", "-d", default="elevenlabs", choices=["openai", "elevenlabs"],
+    parser.add_argument("--dealer", "-d", default="openai", choices=["openai", "elevenlabs"],
                         help="TTS service provider (default: elevenlabs)")
     parser.add_argument("--voice", "-v", default="onyx",
                         help="Voice for dubbing (only for OpenAI, default: onyx)")
