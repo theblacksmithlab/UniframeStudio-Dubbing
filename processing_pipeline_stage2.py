@@ -108,10 +108,12 @@ def process_translation_stage(json_path, args):
     else:
         print(f"Final audio created: {reassembled_audio_path}")
 
+    print("\n=================================================================")
     print(f"\nSecond stage processing completed successfully!")
     print(f"Final translation result: {translated_path}")
     print(f"You can now use this file for video processing with the command:")
     print(f"python cli.py process_video")
+    print("\n=================================================================")
 
     return True
 

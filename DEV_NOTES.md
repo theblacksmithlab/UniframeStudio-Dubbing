@@ -1,82 +1,139 @@
 # Extract audio from video file:
-python3 cli.py extract_audio --input video_input/input.mp4
+
+```bash
+python cli.py extract_audio --input video_input/input.mp4
+```
+
 or
-## Extract audio from all videos in the directory
-python3 cli.py extract_audio --input video_input
+## Extract audio from all videos in the directory:
+
+```bash
+python cli.py extract_audio --input video_input
+```
 
 =================================================================
 
 # Timestamped transcription:
-python3 cli.py transcribe --input audio_input/input.mp3
+
+```bash
+python cli.py transcribe --input audio_input/input.mp3
+```
 
 =================================================================
 
 # Timestamped transcription correction:
-python3 cli.py correct --input output/timestamped_transcriptions/input_transcribed.json
+
+```bash
+python cli.py correct --input output/timestamped_transcriptions/input_transcribed.json
+```
 
 =================================================================
 
 # Transcription segments correction:
-python3 cli.py correct --input output/timestamped_transcriptions/input_transcribed.json --start_timestamp 4.0
+
+```bash
+python cli.py correct --input output/timestamped_transcriptions/input_transcribed.json --start_timestamp 4.0
+```
 
 ## Args 
---start_timestamp int -> Set specific start timestamp for the first segment (e.g. 0.0 or 4.0), for example for adding intro
+--start_timestamp 4.0 -> Set specific start timestamp for the first segment (e.g. 0.0 or 4.0), for example for adding
+known length intro later (optional)
 
 =================================================================
 
 # Corrected timestamped transcription cleaning up:
-python3 cli.py cleanup --input output/timestamped_transcriptions/input_transcribed_corrected.json
+
+```bash
+python cli.py cleanup --input output/timestamped_transcriptions/input_transcribed_corrected.json
+```
 
 =================================================================
 
 # Transcription segments optimization:
-python3 cli.py optimize --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned.json
+
+```bash
+python cli.py optimize --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned.json
+```
 
 =================================================================
 
 # Adjusting segments timing:
-python3 cli.py adjust_timing --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized.json
+
+```bash
+python cli.py adjust_timing --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized.json
+```
 
 =================================================================
 
 # Translation:
+
+```bash
 python3 cli.py translate --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted.json
+```
 
 ## Args 
---model str -> Choose OpenAI's model for translation
+--model str -> Choose OpenAI's model for translation (optional, default: 'gpt-4o')
 
 =================================================================
 
 # TTS (text-to-speech):
-python3 cli.py tts --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted_translated.json
+
+```bash
+python cli.py tts --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted_translated.json
+```
 
 Args:
---dealer openai/elevenlabs -> Choose TTS provider
---voice str -> ONLY for OpenAI TTs provider
---intro -> Add intro from the 'resources' folder
---outro -> Add outro from the 'resources' folder
+--dealer openai/elevenlabs -> Choose TTS provider (optional, default: 'openai')
+--voice str -> only use for OpenAI TTs provider (optional, default: 'onyx')
+--intro -> Add intro from the 'resources' folder (optional)
+--outro -> Add outro from the 'resources' folder (optional)
 
+=================================================================
+ADDITIONAL POST-PROCESSING:
 =================================================================
 
 # Translated text automatic correction to get proper tts_duration:
-python3 cli.py auto-correct --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted_translated.json
+
+```bash
+python cli.py auto-correct --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted_translated.json
+```
 
 ## Args 
---dealer openai/elevenlabs -> Choose TTS provider
+--dealer openai/elevenlabs -> Choose TTS provider (optional, default: 'openai')
 
 =================================================================
 
 ## Regenerating segment by id:
-python3 cli.py segment-tts --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted_translated.json --segment-id 1 --dealer elevenlabs --output segment_1.mp3
+
+```bash
+python cli.py segment-tts --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted_translated.json
+```
+
+## Args
+-- segment-id int -> Specify transcription segment to regenerate
+-- dealer openai/elevenlabs -> Choose TTS provider (optional, default: 'openai')
+-- output str.mp3 -> Specify path to the regenerated file
+
+=================================================================
 
 ## Reassemble output audio from prepared segments at output/temp_audio_segments:
-python3 cli.py reassemble --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted_translated.json --intro --outro
+
+```bash
+python cli.py reassemble --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted_translated.json
+```
+
+Args
+--intro -> Add intro from the 'resources' folder (optional)
+--outro -> Add outro from the 'resources' folder (optional)
 
 =================================================================
 
 # 6-step (audio extraction, transcription, correction, cleaning-up, optimization, time-adjustment) pipeline | STAGE 1:
-## Process a specific video file
-python3 processing_pipeline_stage1.py --input video_input/input.mp4
+## Process input video
+
+```bash
+python processing_pipeline_stage1.py --input video_input/input.mp4
+```
 
 ## Args: 
 --start_timestamp int -> Set specific start timestamp for the first segment (e.g. 0.0 or 4.0), for example for adding intro
@@ -84,22 +141,20 @@ python3 processing_pipeline_stage1.py --input video_input/input.mp4
 =================================================================
 
 # 4-step (translation, tts, text auto-correction, reassemble) pipeline | STAGE 2: 
-python3 processing_pipeline_stage2.py --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted.json
+
+```bash
+python processing_pipeline_stage2.py --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted.json
+```
 
 ## Args:
---dealer openai/elevenlabs -> Choose TTS provider
---intro -> Add intro from the 'resources' folder
---outro -> Add outro from the 'resources' folder
+--dealer openai/elevenlabs -> Choose TTS provider (optional, default: 'openai')
+--intro -> Add intro from the 'resources' folder (optional)
+--outro -> Add outro from the 'resources' folder (optional)
 
 =================================================================
 
-# Edit original video duration with tts_duration info with 25 fps converting:
-python3 cli.py process_video
+# Align the original video to match the timing of the new voiceover with 25 fps converting:
 
-=================================================================
-
-# W3A processing steps:
-
-python3 processing_pipeline_stage1.py --input video_input/input.mp4 --start_timestamp 4.0
-
-python3 processing_pipeline_stage2.py --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted.json --dealer elevenlabs --intro --outro
+```bash
+python cli.py process_video
+```

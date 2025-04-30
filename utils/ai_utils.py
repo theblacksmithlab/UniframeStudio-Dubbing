@@ -10,15 +10,6 @@ def load_system_role_for_timestamped_translation():
         return f.read().strip()
 
 def load_system_role_for_text_correction(mode):
-    """
-    Load system role for text correction based on the mode (reduce/expand)
-
-    Args:
-        mode (str): 'reduce' or 'expand'
-
-    Returns:
-        str: System role content
-    """
     if mode == "reduce":
         role_file = "resources/system_roles/system_role_for_text_reduction.txt"
     elif mode == "expand":
