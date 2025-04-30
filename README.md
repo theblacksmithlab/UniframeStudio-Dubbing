@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="resources/system/uniframe_logo.png" alt="Uniframe Studio" width="200"/>
+  <img src="resources/system/uniframe_logo_2.png" alt="Uniframe Studio" width="200"/>
 </p>
 
 <h1 align="center" style="color:#ebf0d2; font-family: monospace;">Uniframe Studio</h1>

@@ -39,7 +39,7 @@ cd python || exit 1
 
 # 7. Clone the repository if it hasn't been cloned already
 if [ ! -d "uniframe_studio" ]; then
-    git clone https://github.com/0xthecableguy/smart_dubbing.git
+    git clone https://github.com/theblacksmithlab/UniframeStudio.git
 else
     echo "[INFO] Uniframe_studio repository already exists"
 fi

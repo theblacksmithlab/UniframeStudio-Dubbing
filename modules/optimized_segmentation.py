@@ -185,7 +185,7 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
         segment_text = segment.get("text", "").strip()
         sentences = split_into_sentences(segment_text)
 
-        print(f"Segment {segment.get('id')}: Found {len(sentences)} sentences")
+        # print(f"Segment {segment.get('id')}: Found {len(sentences)} sentences")
 
         if len(sentences) <= 1:
             # If there's only one sentence, keep the segment as is
@@ -213,9 +213,9 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
     # Sort raw segments by start time
     raw_segments.sort(key=lambda x: x["start"])
 
-    for i, segment in enumerate(raw_segments):
-        print(
-            f"DEBUG: Raw segment {i}: start={segment['start']}, end={segment['end']}, text='{segment['text'][:30]}...'")
+    # for i, segment in enumerate(raw_segments):
+    #     print(
+    #         f"DEBUG: Raw segment {i}: start={segment['start']}, end={segment['end']}, text='{segment['text'][:30]}...'")
 
     # STEP 2: Merge short segments to meet minimum length requirement
     merged_segments = []
