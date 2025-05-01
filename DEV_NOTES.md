@@ -7,9 +7,7 @@ python cli.py extract_audio --input video_input/input.mp4
 or
 ## Extract audio from all videos in the directory:
 
-```bash
 python cli.py extract_audio --input video_input
-```
 
 =================================================================
 

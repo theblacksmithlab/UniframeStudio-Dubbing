@@ -69,3 +69,4 @@ resources/intro_outro.mp3
 resources/intro_outro_fps25.mp4
 W3A_processing_steps.md
 modules/video_duration_edit_workflow.py
+video_duration_edit_workflow.py
