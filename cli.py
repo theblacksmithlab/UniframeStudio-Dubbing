@@ -332,7 +332,6 @@ def main():
             json_file = os.path.join(current_dir, "output", "timestamped_transcriptions",
                                      "input_transcribed_corrected_cleaned_optimized_adjusted_translated.json")
             output_video = os.path.join(output_dir, "output.mp4")
-            intro_outro = os.path.join(resources_dir, "intro_outro_25fps.mp4")
 
             os.makedirs(output_dir, exist_ok=True)
 
@@ -344,15 +343,15 @@ def main():
                 print(f"Error: JSON file not found: {json_file}")
                 return
 
-            if not os.path.exists(intro_outro):
-                print(f"Error: Intro/outro file not found: {intro_outro}")
+            if not os.path.exists(resources_dir):
+                print(f"Error: Resources directory not found: {resources_dir}")
                 return
 
             processor = VideoProcessor(
                 input_video_path=input_video,
                 json_path=json_file,
                 output_video_path=output_video,
-                intro_outro_path=intro_outro,
+                intro_outro_path=resources_dir,
                 target_fps=25
             )
 
