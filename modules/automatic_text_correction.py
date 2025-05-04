@@ -126,10 +126,10 @@ def correct_segment_durations(translation_file, max_attempts=5, threshold=0.2, v
             mode = "reduce" if segment_data["needs_reduction"] else "expand"
 
             print(f"\nProcessing segment {segment_id}...")
-            print(f"  Original duration: {segment['original_duration']:.3f}s")
-            print(f"  TTS duration: {segment['tts_duration']:.3f}s")
-            print(f"  Difference: {segment_data['diff_ratio'] * 100:.1f}%")
-            print(f"  Action needed: {mode}")
+            print(f"Original duration: {segment['original_duration']:.3f}s")
+            print(f"TTS duration: {segment['tts_duration']:.3f}s")
+            print(f"Difference: {segment_data['diff_ratio'] * 100:.1f}%")
+            print(f"Action needed: {mode}")
 
             # Get segment index for context
             segment_index = next((i for i, s in enumerate(segments) if s["id"] == segment_id), None)
@@ -167,7 +167,7 @@ def correct_segment_durations(translation_file, max_attempts=5, threshold=0.2, v
             segment_audio_file = os.path.join(segments_dir, f"segment_{segment_id}.mp3")
 
             # Regenerate the audio segment
-            print(f"  Regenerating audio for segment {segment_id}...")
+            print(f"Regenerating audio for segment {segment_id}...")
             regenerate_segment(
                 translation_file,
                 segment_id,
