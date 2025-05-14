@@ -1,49 +1,44 @@
 #!/usr/bin/env python3
 import argparse
 import os
-import dotenv
+import sys
+
+# import dotenv
 
 from modules.adjust_timing import adjust_segments_timing
 from modules.cleaning_up_corrected_transcirption import cleanup_transcript_segments
 from modules.transcribe_with_timestamps import transcribe_audio_with_timestamps
 from modules.transcription_correction import correct_transcript_segments
-from modules.translation import translate_transcript_segments
+from modules.translation import translate_transcribed_segments
 from modules.tts import generate_tts_for_segments, reassemble_audio_file
-from modules.tts_correction import regenerate_segment
-from video_duration_edit_workflow import VideoProcessor
+# from modules.tts_correction import regenerate_segment
+from modules.video_duration_edit_workflow import VideoProcessor
 from modules.video_to_audio_conversion import extract_audio
 from modules.optimized_segmentation import optimize_transcription_segments
 from modules.automatic_text_correction import correct_segment_durations
 
 
 def main():
-    dotenv.load_dotenv()
-
-    if not os.getenv("OPENAI_API_KEY"):
-        print("OPENAI_API_KEY must be set in .env file to get full functionality!")
-
-    if not os.getenv("ELEVENLABS_API_KEY"):
-        print("ELEVENLABS_API_KEY must be set in .env file to get full functionality!")
-
     parser = argparse.ArgumentParser(description="Smart dubbing system")
-
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
     # Audio extraction sub-parser
     extract_parser = subparsers.add_parser("extract_audio", help="Extract audio from video file")
     extract_parser.add_argument("--input", "-i", required=True, help="Input video-file path")
+    extract_parser.add_argument("--output", "-o", help="Extracted audio-file path (optional)")
 
     # Transcription command sub-parser
     transcribe_parser = subparsers.add_parser("transcribe", help="Transcribe audio with timestamps")
+    transcribe_parser.add_argument("--job_id", required=True, help="Job identifier")
     transcribe_parser.add_argument("--input", "-i", required=True, help="Input audio-file path")
+    transcribe_parser.add_argument("--output", "-o", help="Output transcription file path (optional)")
+    transcribe_parser.add_argument("--source_language", "-sl", help="Source language code (e.g., 'en', 'ru', 'es')")
+    transcribe_parser.add_argument("--openai_api_key", required=True, help="OpenAI API key")
 
     # Segments correction command sub-parser
     correct_parser = subparsers.add_parser("correct", help="Structure raw transcription")
     correct_parser.add_argument("--input", "-i", required=True, help="Path to raw transcription file")
-    correct_parser.add_argument("--output", "-o",
-                                help="Path to save structured transcription (optional)")
-    correct_parser.add_argument("--start_timestamp", "-st", type=float,
-                                help="Set specific start timestamp for the first segment (e.g. 0.0 or 4.0)")
+    correct_parser.add_argument("--output", "-o", help="Path to save structured transcription (optional)")
 
     # Sub-parser for clearing segments command
     cleanup_parser = subparsers.add_parser("cleanup",
@@ -64,6 +59,7 @@ def main():
     adjust_parser = subparsers.add_parser("adjust_timing",
                                           help="Adjust segment end times to match next segment start times")
     adjust_parser.add_argument("--input", "-i", required=True, help="Path to the optimized transcription file")
+    adjust_parser.add_argument("--output", "-o", help="Path to save adjusted transcription (optional)")
 
     # Sub-parser for the segment translation command
     translate_parser = subparsers.add_parser("translate", help="Translates transcription segments")
@@ -73,63 +69,75 @@ def main():
                                   help="Path to save translated transcription (optional)")
     translate_parser.add_argument("--model", "-m", default="gpt-4o",
                                   help="Translation model (default: gpt-4o)")
+    translate_parser.add_argument("--target_language", "-tl", required=True,
+                                  help="Target language for translation")
+    translate_parser.add_argument("--openai_api_key", required=True, help="OpenAI API key")
 
     # Sub-parser for the segment voicing over command
     tts_parser = subparsers.add_parser("tts", help="Voices over translated segments")
     tts_parser.add_argument("--input", "-i", required=True,
                             help="Path to translated transcription file")
     tts_parser.add_argument("--output", "-o", help="Path to save the audio file (optional)")
-    tts_parser.add_argument("--dealer", "-d", default="openai", choices=["openai", "elevenlabs"],
-                            help="TTS service provider (default: openai)")
-    tts_parser.add_argument("--voice", "-v", default="onyx",
-                            help="Voice for dubbing (only used for OpenAI, default: onyx)")
-    tts_parser.add_argument("--intro", action="store_true",
-                            help="Add intro audio at the beginning (replaces first 4 seconds)")
-    tts_parser.add_argument("--outro", action="store_true",
-                            help="Add outro audio after the last segment")
+    tts_parser.add_argument("--dealer", "-d", required=True, choices=["openai", "elevenlabs"],
+                            help="TTS service provider")
+    tts_parser.add_argument("--voice", "-v", required=True,
+                            help="Voice for dubbing")
+    tts_parser.add_argument("--elevenlabs_api_key", help="ElevenLabs API key (required for ElevenLabs)")
+    tts_parser.add_argument("--openai_api_key", help="OpenAI API key (required for OpenAI)")
+    tts_parser.add_argument("--job_id", required=True, help="Job identifier")
 
-    # Sub-parser for regenerating a single segment
-    segment_tts_parser = subparsers.add_parser("segment-tts",
-                                               help="Regenerate audio for a specific segment with updated translation")
-    segment_tts_parser.add_argument("--input", "-i", required=True,
-                                    help="Path to translated transcription file")
-    segment_tts_parser.add_argument("--segment-id", "-s", required=True, type=int,
-                                    help="ID of the segment to regenerate")
-    segment_tts_parser.add_argument("--output", "-o",
-                                    help="Path to save the segment audio file (optional)")
-    segment_tts_parser.add_argument("--dealer", "-d", default="openai", choices=["openai", "elevenlabs"],
-                                    help="TTS service provider (default: openai)")
-    segment_tts_parser.add_argument("--voice", "-v", default="onyx",
-                                    help="Voice for dubbing (only used for OpenAI, default: onyx)")
+    # # Sub-parser for regenerating a single segment
+    # segment_tts_parser = subparsers.add_parser("segment-tts",
+    #                                            help="Regenerate audio for a specific segment with updated translation")
+    # segment_tts_parser.add_argument("--input", "-i", required=True,
+    #                                 help="Path to translated transcription file")
+    # segment_tts_parser.add_argument("--segment-id", "-s", required=True, type=int,
+    #                                 help="ID of the segment to regenerate")
+    # segment_tts_parser.add_argument("--output", "-o",
+    #                                 help="Path to save the segment audio file (optional)")
+    # segment_tts_parser.add_argument("--dealer", "-d", default="openai", choices=["openai", "elevenlabs"],
+    #                                 help="TTS service provider (default: openai)")
+    # segment_tts_parser.add_argument("--voice", "-v", default="onyx",
+    #                                 help="Voice for dubbing (only used for OpenAI, default: onyx)")
 
     text_correction_parser = subparsers.add_parser("auto-correct",
                                                    help="Automatically correct text segments to match original duration")
     text_correction_parser.add_argument("--input", "-i", required=True,
                                         help="Path to translated transcription file with TTS data")
+    text_correction_parser.add_argument("--output", "-o", help="Path to save reassembled audio file (optional)")
     text_correction_parser.add_argument("--attempts", "-a", type=int, default=5,
                                         help="Maximum number of correction attempts (default: 5)")
     text_correction_parser.add_argument("--threshold", "-t", type=float, default=0.2,
                                         help="Duration difference threshold for correction (default: 0.2 or 20%)")
-    text_correction_parser.add_argument("--dealer", "-d", default="openai", choices=["openai", "elevenlabs"],
-                                        help="TTS service provider (default: openai)")
-    text_correction_parser.add_argument("--voice", "-v", default="onyx",
-                                        help="Voice for dubbing (only used for OpenAI, default: onyx)")
+    text_correction_parser.add_argument("--dealer", "-d", required=True, choices=["openai", "elevenlabs"],
+                                        help="TTS service provider")
+    text_correction_parser.add_argument("--voice", "-v", required=True,
+                                        help="Voice for dubbing")
+    text_correction_parser.add_argument("--elevenlabs_api_key", help="ElevenLabs API key (optional)")
+    text_correction_parser.add_argument("--openai_api_key", help="OpenAI API key (required for text correction)")
+    text_correction_parser.add_argument("--job_id", required=True, help="Job identifier")
 
-    # Add a new sub-parser for reassembling audio from existing segments
-    reassemble_parser = subparsers.add_parser("reassemble",
-                                              help="Reassemble audio file from existing segments")
-    reassemble_parser.add_argument("--input", "-i", required=True,
-                                   help="Path to translated transcription file")
-    reassemble_parser.add_argument("--output", "-o",
-                                   help="Path to save the reassembled audio file (optional)")
-    reassemble_parser.add_argument("--intro", action="store_true",
-                                   help="Add intro audio at the beginning (replaces first 4 seconds)")
-    reassemble_parser.add_argument("--outro", action="store_true",
-                                   help="Add outro audio after the last segment")
+    # # Add a new sub-parser for reassembling audio from existing segments
+    # reassemble_parser = subparsers.add_parser("reassemble",
+    #                                           help="Reassemble audio file from existing segments")
+    # reassemble_parser.add_argument("--input", "-i", required=True,
+    #                                help="Path to translated transcription file")
+    # reassemble_parser.add_argument("--output", "-o",
+    #                                help="Path to save the reassembled audio file (optional)")
+    # reassemble_parser.add_argument("--intro", action="store_true",
+    #                                help="Add intro audio at the beginning (replaces first 4 seconds)")
+    # reassemble_parser.add_argument("--outro", action="store_true",
+    #                                help="Add outro audio after the last segment")
 
     # Sub-parser for processing input video
-    subparsers.add_parser("process_video", help="Process video according to TTS duration")
-
+    video_parser = subparsers.add_parser("process_video", help="Process video according to TTS duration")
+    video_parser.add_argument("--job_id", required=True, help="Job identifier")
+    video_parser.add_argument("--input_video", required=True, help="Path to input video file")
+    video_parser.add_argument("--json_file", required=True, help="Path to translated JSON with timing")
+    video_parser.add_argument("--output_video", required=True, help="Path for output video")
+    video_parser.add_argument("--resources_dir", required=True, help="Path to resources directory")
+    video_parser.add_argument("--is_premium", action="store_true", required=True,
+                              help="Premium user (no intro/outro)")
 
     args = parser.parse_args()
 
@@ -141,10 +149,16 @@ def main():
     if args.command == "extract_audio":
         if not os.path.exists(args.input):
             print(f"Error: Video file {args.input} not found.")
+            return
+
         try:
-            result_file = extract_audio(args.input)
-            print(f"Extracting audio from video file completed successfully."
-                  f"The result was saved in file: {result_file}")
+            result_file = extract_audio(args.input, args.output)
+            if result_file:
+                print(f"Extracting audio from video file completed successfully.")
+                print(f"The result was saved in file: {result_file}")
+            else:
+                print("Error: Audio extraction failed.")
+                return
         except Exception as e:
             print(f"Error during video conversion: {e}")
             return
@@ -155,8 +169,17 @@ def main():
             return
 
         print(f"Transcribing the file: {args.input}")
+        if args.source_language:
+            print(f"Using source language: {args.source_language}")
         try:
-            result_file = transcribe_audio_with_timestamps(args.input)
+            result_file = transcribe_audio_with_timestamps(
+                args.input,
+                args.job_id,
+                source_language=args.source_language,
+                output_file=args.output,
+                openai_api_key=args.openai_api_key
+            )
+
             print(f"Transcription completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during transcription: {e}")
@@ -169,7 +192,7 @@ def main():
 
         print(f"Restructuring transcription segments: {args.input}")
         try:
-            result_file = correct_transcript_segments(args.input, args.output, args.start_timestamp)
+            result_file = correct_transcript_segments(args.input, args.output)
             print(f"Restructuring completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during restructuring: {e}")
@@ -209,8 +232,9 @@ def main():
             return
 
         print(f"Adjusting segment timing in file: {args.input}")
+
         try:
-            result_file = adjust_segments_timing(args.input)
+            result_file = adjust_segments_timing(args.input, args.output)
             print(f"Timing adjustment completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during timing adjustment: {e}")
@@ -222,21 +246,17 @@ def main():
             return
 
         print(f"Translating transcription segments: {args.input}")
+        print(f"Target language: {args.target_language}")
+        print(f"Using model: {args.model}")
+
         try:
-            import openai
-            openai_model = args.model
-
-            original_model = None
-            if hasattr(openai, 'model'):
-                original_model = openai.model
-
-            if hasattr(openai, 'model'):
-                openai.model = openai_model
-
-            result_file = translate_transcript_segments(args.input, args.output)
-
-            if original_model is not None and hasattr(openai, 'model'):
-                openai.model = original_model
+            result_file = translate_transcribed_segments(
+                args.input,
+                args.output,
+                target_language=args.target_language,
+                model=args.model,
+                openai_api_key=args.openai_api_key
+            )
 
             print(f"Translation completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
@@ -249,49 +269,80 @@ def main():
             return
 
         print(f"Voicing-over translated segments using {args.dealer}: {args.input}")
+        print(f"Using voice: {args.voice}")
+
         try:
             result_file = generate_tts_for_segments(
-                args.input, args.output, args.voice, args.dealer,
-                intro=args.intro, outro=args.outro
+                args.input,
+                args.job_id,
+                args.output,
+                args.voice,
+                args.dealer,
+                elevenlabs_api_key=args.elevenlabs_api_key if hasattr(args, 'elevenlabs_api_key') else None,
+                openai_api_key=args.openai_api_key if hasattr(args, 'openai_api_key') else None
             )
-            print(f"Voicing-over completed successfully. The result was saved in file: {result_file}")
+
+            if result_file:
+                print(f"Voicing-over completed successfully. The result was saved in file: {result_file}")
+            else:
+                print("Error: TTS generation failed.")
+                return
+
+
         except Exception as e:
             print(f"Error voicing-over segments: {e}")
             import traceback
             traceback.print_exc()
             return
 
-    elif args.command == "segment-tts":
-        if not os.path.exists(args.input):
-            print(f"Error: Translated transcription file {args.input} not found.")
-            return
-
-        print(f"Regenerating segment {args.segment_id} using {args.dealer}: {args.input}")
-        try:
-            result_file = regenerate_segment(
-                args.input, args.segment_id, args.output, args.voice, args.dealer
-            )
-            if result_file:
-                print(f"Segment regeneration completed successfully. The result was saved in file: {result_file}")
-        except Exception as e:
-            print(f"Error regenerating segment: {e}")
-            import traceback
-            traceback.print_exc()
-            return
+    # elif args.command == "segment-tts":
+    #     if not os.path.exists(args.input):
+    #         print(f"Error: Translated transcription file {args.input} not found.")
+    #         return
+    #
+    #     print(f"Regenerating segment {args.segment_id} using {args.dealer}: {args.input}")
+    #     try:
+    #         result_file = regenerate_segment(
+    #             args.input, args.segment_id, args.output, args.voice, args.dealer
+    #         )
+    #         if result_file:
+    #             print(f"Segment regeneration completed successfully. The result was saved in file: {result_file}")
+    #     except Exception as e:
+    #         print(f"Error regenerating segment: {e}")
+    #         import traceback
+    #         traceback.print_exc()
+    #         return
 
     elif args.command == "auto-correct":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
             return
 
+        if args.dealer == "elevenlabs" and not args.elevenlabs_api_key:
+            print(f"Error: ElevenLabs API key is required for ElevenLabs TTS")
+            return
+
+        if args.dealer == "openai" and not args.openai_api_key:
+            print(f"Error: OpenAI API key is required for OpenAI TTS")
+            return
+
+        if not args.openai_api_key:
+            print(f"Error: OpenAI API key is required for text correction")
+            return
+
         print(f"Automatically correcting segment durations: {args.input}")
+        print(f"Using TTS provider: {args.dealer} with voice: {args.voice}")
+
         try:
             result_file = correct_segment_durations(
                 translation_file=args.input,
+                job_id=args.job_id,
                 max_attempts=args.attempts,
                 threshold=args.threshold,
                 voice=args.voice,
-                dealer=args.dealer
+                dealer=args.dealer,
+                elevenlabs_api_key=args.elevenlabs_api_key,
+                openai_api_key=args.openai_api_key
             )
             print(f"Automatic text correction completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
@@ -300,16 +351,12 @@ def main():
             traceback.print_exc()
             return
 
-    elif args.command == "reassemble":
-        if not os.path.exists(args.input):
-            print(f"Error: Translation file {args.input} not found.")
-            return
-
         print(f"Reassembling audio from segments using file: {args.input}")
         try:
             result_file = reassemble_audio_file(
-                args.input, args.output,
-                intro=args.intro, outro=args.outro
+                args.input,
+                args.job_id,
+                args.output
             )
             if result_file:
                 print(f"Audio successfully reassembled. The result was saved in file: {result_file}")
@@ -319,46 +366,39 @@ def main():
             traceback.print_exc()
             return
 
-
     elif args.command == "process_video":
         print("Initializing Video Processor...")
+
         try:
-
-            current_dir = os.path.abspath(os.getcwd())
-            input_dir = os.path.join(current_dir, "video_input")
-            output_dir = os.path.join(current_dir, "video_output")
-            resources_dir = os.path.join(current_dir, "resources")
-            input_video = os.path.join(input_dir, "input.mp4")
-            json_file = os.path.join(current_dir, "output", "timestamped_transcriptions",
-                                     "input_transcribed_corrected_cleaned_optimized_adjusted_translated.json")
-            output_video = os.path.join(output_dir, "output.mp4")
-
-            os.makedirs(output_dir, exist_ok=True)
-
-            if not os.path.exists(input_video):
-                print(f"Error: Input video not found: {input_video}")
+            if not os.path.exists(args.input_video):
+                print(f"Error: Input video not found: {args.input_video}")
                 return
 
-            if not os.path.exists(json_file):
-                print(f"Error: JSON file not found: {json_file}")
+            if not os.path.exists(args.json_file):
+                print(f"Error: JSON file not found: {args.json_file}")
                 return
 
-            if not os.path.exists(resources_dir):
-                print(f"Error: Resources directory not found: {resources_dir}")
+            if not os.path.exists(args.resources_dir):
+                print(f"Error: Resources directory not found: {args.resources_dir}")
                 return
+
+            os.makedirs(os.path.dirname(args.output_video), exist_ok=True)
 
             processor = VideoProcessor(
-                input_video_path=input_video,
-                json_path=json_file,
-                output_video_path=output_video,
-                intro_outro_path=resources_dir,
-                target_fps=25
+                job_id=args.job_id,
+                input_video_path=args.input_video,
+                json_path=args.json_file,
+                output_video_path=args.output_video,
+                intro_outro_path=args.resources_dir,
+                target_fps=25,
+                is_premium=args.is_premium
             )
 
             if processor.process():
-                print(f"Video processing completed successfully. The result was saved in file: {output_video}")
+                print(f"Video processing completed successfully. The result was saved in file: {args.output_video}")
             else:
                 print("Video processing failed.")
+                sys.exit(1)
 
         except Exception as e:
             print(f"Error during video processing: {e}")

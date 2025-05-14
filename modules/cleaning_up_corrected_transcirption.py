@@ -12,7 +12,6 @@ def cleanup_transcript_segments(input_file, output_file=None):
         transcript = json.load(f)
 
     segments = transcript.get('segments', [])
-    print(f"Loaded {len(segments)} segments for cleanup.")
 
     cleaned_segments = []
     removed_count = 0

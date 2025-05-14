@@ -40,27 +40,10 @@ def split_into_sentences(text):
 
 
 def find_exact_sequence(sentence, words_list, segment_start, segment_end):
-    """
-    Find exact sequence of words from sentence in words_list and return timestamps.
-    Uses a sliding window approach to find the best match.
-
-    Args:
-        sentence: The sentence to find
-        words_list: List of words with timestamps
-        segment_start: Start time of segment
-        segment_end: End time of segment
-
-    Returns:
-        dict with start and end timestamps
-    """
     # Extract words from the sentence
     sentence_words = [w.lower() for w in re.findall(r'\b(\w+)\b', sentence)]
     if not sentence_words:
         return {"start": segment_start, "end": segment_end}
-
-    print(f"DEBUG: Finding exact sequence for sentence with {len(sentence_words)} words")
-    print(f"DEBUG: First few words: {sentence_words[:3]}")
-    print(f"DEBUG: Last few words: {sentence_words[-3:]}")
 
     # Filter words_list to only include words in the time range
     filtered_words = [w for w in words_list if segment_start <= w.get("start", 0) <= segment_end]
@@ -98,29 +81,18 @@ def find_exact_sequence(sentence, words_list, segment_start, segment_end):
             best_match_start_idx = start_idx
             best_match_end_idx = start_idx + min(len(sentence_words), len(filtered_words) - start_idx) - 1
 
-    print(f"DEBUG: Best match score: {best_match_score:.2f}")
-
     # If match score is too low, fall back to segment timestamps
     if best_match_score < 0.5:  # Require at least 50% match
-        print(f"DEBUG: Match score too low, using segment timestamps")
         return {"start": segment_start, "end": segment_end}
 
     # Get timestamps from the best match
     start_time = filtered_words[best_match_start_idx].get("start", segment_start)
     end_time = filtered_words[best_match_end_idx].get("end", segment_end)
 
-    print(f"DEBUG: Found sequence: start={start_time}, end={end_time}")
-    print(
-        f"DEBUG: From word '{filtered_words[best_match_start_idx].get('word')}' to '{filtered_words[best_match_end_idx].get('word')}'")
-
     return {"start": start_time, "end": end_time}
 
 
 def get_sentence_timestamps(sentence, segment, words_list):
-    """
-    Get accurate start and end timestamps for a sentence within a segment
-    using exact sequence matching.
-    """
     sentence = sentence.strip()
     if not sentence:
         return None
@@ -128,13 +100,11 @@ def get_sentence_timestamps(sentence, segment, words_list):
     segment_start = segment.get("start", 0)
     segment_end = segment.get("end", 0)
 
-    print(f"DEBUG: Getting timestamps for sentence: '{sentence[:50]}...'")
-
     # Find the exact sequence match
     timestamps = find_exact_sequence(sentence, words_list, segment_start, segment_end)
 
-    # Add a small buffer to avoid exact overlaps
-    buffer = 0.01  # 10ms buffer
+    # # Add a small buffer to avoid exact overlaps
+    # buffer = 0.01  # 10ms buffer
 
     # Ensure timestamps are valid
     if timestamps["start"] >= timestamps["end"]:
@@ -153,16 +123,10 @@ def get_sentence_timestamps(sentence, segment, words_list):
     timestamps["start"] = max(timestamps["start"], segment_start)
     timestamps["end"] = min(timestamps["end"], segment_end)
 
-    print(f"DEBUG: Final timestamps: start={timestamps['start']}, end={timestamps['end']}")
-
     return timestamps
 
 
 def optimize_transcription_segments(transcription_file, output_file=None, min_segment_length=60):
-    """
-    Optimize transcription segments by splitting into proper sentences
-    with accurate timestamps.
-    """
     with open(transcription_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -173,7 +137,7 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
     segments = data.get("segments", [])
     words_list = data.get("words", [])
 
-    print(f"Optimizing {len(segments)} segments...")
+    print(f"Optimizing {len(segments)} transcription segments...")
 
     # STEP 1: Split segments into sentences with proper timestamps
     raw_segments = []
@@ -184,8 +148,6 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
 
         segment_text = segment.get("text", "").strip()
         sentences = split_into_sentences(segment_text)
-
-        # print(f"Segment {segment.get('id')}: Found {len(sentences)} sentences")
 
         if len(sentences) <= 1:
             # If there's only one sentence, keep the segment as is
@@ -212,10 +174,6 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
 
     # Sort raw segments by start time
     raw_segments.sort(key=lambda x: x["start"])
-
-    # for i, segment in enumerate(raw_segments):
-    #     print(
-    #         f"DEBUG: Raw segment {i}: start={segment['start']}, end={segment['end']}, text='{segment['text'][:30]}...'")
 
     # STEP 2: Merge short segments to meet minimum length requirement
     merged_segments = []
@@ -283,7 +241,7 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
-    print(f"Optimization complete! {len(new_segments)} segments created.")
+    print(f"Transcription optimization complete! {len(new_segments)} segments created.")
     print(f"Result saved to: {output_file}")
 
     return output_file

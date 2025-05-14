@@ -1,37 +1,25 @@
-"""
-Automatic Text Correction Module
-This module adjusts text length to match original audio duration
-"""
-
 import os
 import json
 import openai
-from dotenv import load_dotenv
 from modules.tts_correction import regenerate_segment
 from utils.ai_utils import load_system_role_for_text_correction
 
 
-def correct_text_through_api(current_text, original_duration, tts_duration, mode, previous_text="", next_text=""):
-    """
-    Send text to OpenAI API for correction (expansion or reduction)
+def correct_text_through_api(
+        current_text,
+        original_duration,
+        tts_duration,
+        mode,
+        previous_text="",
+        next_text="",
+        openai_api_key=None
+):
 
-    Args:
-        current_text (str): Text to correct
-        original_duration (float): Original duration in seconds
-        tts_duration (float): TTS duration in seconds
-        mode (str): 'reduce' or 'expand'
-        previous_text (str): Text of the previous segment for context
-        next_text (str): Text of the next segment for context
+    if not openai_api_key:
+        raise ValueError("OpenAI API key is required for text correction but not provided")
 
-    Returns:
-        str: Corrected text
-    """
     system_role = load_system_role_for_text_correction(mode)
 
-    # Calculate the percentage difference
-    percentage_diff = ((tts_duration - original_duration) / original_duration) * 100
-
-    # Construct prompt with details about the duration mismatch and context
     context_parts = []
     if previous_text:
         context_parts.append(f"Previous segment text (for context): {previous_text}")
@@ -48,7 +36,9 @@ def correct_text_through_api(current_text, original_duration, tts_duration, mode
     print(f"Prompt: {prompt}")
 
     try:
-        response = openai.chat.completions.create(
+        client = openai.OpenAI(api_key=openai_api_key)
+
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_role},
@@ -62,39 +52,23 @@ def correct_text_through_api(current_text, original_duration, tts_duration, mode
 
     except Exception as e:
         print(f"Error correcting text: {e}")
-        return current_text  # Return original text if correction fails
+        return current_text
 
 
-def correct_segment_durations(translation_file, max_attempts=5, threshold=0.2, voice="onyx", dealer="openai"):
-    """
-    Main function to correct segment durations by adjusting text length
-
-    Args:
-        translation_file (str): Path to JSON file with segments
-        max_attempts (int): Maximum number of correction attempts
-        threshold (float): Threshold for duration difference (default 20%)
-        voice (str): Voice to use for TTS
-        dealer (str): TTS provider ('openai' or 'elevenlabs')
-
-    Returns:
-        str: Path to updated JSON file
-    """
-    load_dotenv()
-
-    base_dir = os.path.dirname(translation_file)
+def correct_segment_durations(translation_file, job_id, max_attempts=5, threshold=0.2, voice="onyx", dealer="openai",
+                              elevenlabs_api_key=None, openai_api_key=None):
+    base_dir = f"jobs/{job_id}/output"
     segments_dir = os.path.join(base_dir, "audio_segments")
 
     for attempt in range(1, max_attempts + 1):
         print(f"\n=== Attempt {attempt}/{max_attempts} for correcting segment durations ===")
 
-        # Load the current state of the transcription file
         with open(translation_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         segments = data.get("segments", [])
         segments_needing_correction = []
 
-        # Identify segments that need correction
         for segment in segments:
             if "tts_duration" not in segment or "original_duration" not in segment:
                 continue
@@ -102,7 +76,6 @@ def correct_segment_durations(translation_file, max_attempts=5, threshold=0.2, v
             original_duration = segment["original_duration"]
             tts_duration = segment["tts_duration"]
 
-            # Calculate the difference ratio
             diff_ratio = abs(tts_duration - original_duration) / original_duration
 
             if diff_ratio > threshold:
@@ -119,7 +92,6 @@ def correct_segment_durations(translation_file, max_attempts=5, threshold=0.2, v
 
         print(f"Found {len(segments_needing_correction)} segments that need correction")
 
-        # Process each segment that needs correction
         for segment_data in segments_needing_correction:
             segment = segment_data["segment"]
             segment_id = segment_data["id"]
@@ -131,13 +103,11 @@ def correct_segment_durations(translation_file, max_attempts=5, threshold=0.2, v
             print(f"Difference: {segment_data['diff_ratio'] * 100:.1f}%")
             print(f"Action needed: {mode}")
 
-            # Get segment index for context
             segment_index = next((i for i, s in enumerate(segments) if s["id"] == segment_id), None)
             if segment_index is None:
                 print(f"Warning: Could not find segment {segment_id} in segments list")
                 continue
 
-            # Get context from surrounding segments
             previous_text = ""
             next_text = ""
 
@@ -146,44 +116,40 @@ def correct_segment_durations(translation_file, max_attempts=5, threshold=0.2, v
             if segment_index < len(segments) - 1:
                 next_text = segments[segment_index + 1].get("translated_text", "").strip()
 
-            # Get corrected text from OpenAI
             corrected_text = correct_text_through_api(
                 segment["translated_text"],
                 segment["original_duration"],
                 segment["tts_duration"],
                 mode,
                 previous_text,
-                next_text
+                next_text,
+                openai_api_key=openai_api_key
             )
 
-            # Update the segment with corrected text
             data["segments"][segment_index]["translated_text"] = corrected_text
 
-            # Save the updated data to file before regenerating
             with open(translation_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
 
-            # Define output path for the segment audio
             segment_audio_file = os.path.join(segments_dir, f"segment_{segment_id}.mp3")
 
-            # Regenerate the audio segment
             print(f"Regenerating audio for segment {segment_id}...")
             regenerate_segment(
                 translation_file,
+                job_id,
                 segment_id,
                 output_audio_file=segment_audio_file,
                 voice=voice,
-                dealer=dealer
+                dealer=dealer,
+                elevenlabs_api_key=elevenlabs_api_key,
+                openai_api_key=openai_api_key,
             )
 
-            # Reload the data after regeneration to get updated metrics
             with open(translation_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            # Update the segments list for the next iteration
             segments = data.get("segments", [])
 
-    # After all attempts, check if any segments still need correction
     with open(translation_file, "r", encoding="utf-8") as f:
         final_data = json.load(f)
 

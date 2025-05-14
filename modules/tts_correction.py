@@ -1,20 +1,19 @@
 import os
 import json
-import shutil
 import subprocess
-
 import openai
 from pydub import AudioSegment
-from dotenv import load_dotenv
-
 from modules.tts import make_api_request_with_retry
 from modules.tts import match_target_amplitude
 
 
-def regenerate_segment(translation_file, segment_id, output_audio_file=None, voice="onyx", dealer="openai"):
-    load_dotenv()
-    elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-    elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
+def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=None, voice="onyx", dealer="openai",
+                       elevenlabs_api_key=None, openai_api_key=None):
+    if dealer.lower() == "elevenlabs" and not elevenlabs_api_key:
+        raise ValueError("ElevenLabs API key is required for ElevenLabs TTS but not provided")
+
+    if dealer.lower() == "openai" and not openai_api_key:
+        raise ValueError("OpenAI API key is required for OpenAI TTS but not provided")
 
     with open(translation_file, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -64,8 +63,10 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
         if segment_index > 1 and "request_id" in segments[segment_index - 2]:
             previous_ids.append(segments[segment_index - 2]["request_id"])
 
+    base_dir = f"jobs/{job_id}/output"
+
     if output_audio_file is None:
-        segments_dir = os.path.join(os.path.dirname(translation_file), "audio_segments")
+        segments_dir = os.path.join(base_dir, "audio_segments")
         os.makedirs(segments_dir, exist_ok=True)
         output_audio_file = os.path.join(segments_dir, f"segment_{segment_id}.mp3")
 
@@ -73,14 +74,15 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
     print(
         f"Start: {target_segment['start']}s, End: {target_segment['end']}s, Original Duration: {original_duration_sec}s")
 
-    temp_dir = os.path.join(os.path.dirname(translation_file), "temp_audio_segments")
+    temp_dir = os.path.join(base_dir, "temp_audio_segments")
     os.makedirs(temp_dir, exist_ok=True)
-
     temp_file = os.path.join(temp_dir, f"segment_{segment_id}.mp3")
 
     try:
         if dealer.lower() == "openai":
-            response = openai.audio.speech.create(
+            client = openai.OpenAI(api_key=openai_api_key)
+
+            response = client.audio.speech.create(
                 model="tts-1",
                 voice=voice,
                 input=text
@@ -112,8 +114,9 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
 
             headers = {"xi-api-key": elevenlabs_api_key}
 
+            print(f"Using ElevenLabs voice ID: {voice}")
             response = make_api_request_with_retry(
-                f"https://api.elevenlabs.io/v1/text-to-speech/{elevenlabs_voice_id}/stream",
+                f"https://api.elevenlabs.io/v1/text-to-speech/{voice}/stream",
                 request_data,
                 headers
             )
@@ -175,7 +178,5 @@ def regenerate_segment(translation_file, segment_id, output_audio_file=None, voi
     finally:
         if os.path.exists(temp_file):
             os.remove(temp_file)
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
 
     return output_audio_file

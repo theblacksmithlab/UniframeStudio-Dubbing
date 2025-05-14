@@ -33,7 +33,7 @@ def is_sentence_complete(text):
     return text[-1] in ['.', '!', '?']
 
 
-def correct_transcript_segments(input_file, output_file=None, start_timestamp=None):
+def correct_transcript_segments(input_file, output_file=None):
     if output_file is None:
         base_dir = os.path.dirname(input_file)
         base_name = os.path.splitext(os.path.basename(input_file))[0]
@@ -43,7 +43,7 @@ def correct_transcript_segments(input_file, output_file=None, start_timestamp=No
         transcript = json.load(f)
 
     segments = transcript.get('segments', [])
-    print(f"Loaded {len(segments)} segments for processing.")
+    print(f"Loaded {len(segments)} transcription segments for processing.")
 
     max_merges = len(segments)
 
@@ -93,23 +93,9 @@ def correct_transcript_segments(input_file, output_file=None, start_timestamp=No
 
     transcript['text'] = full_text.strip()
 
-    if start_timestamp is not None:
-        for segment in transcript['segments']:
-            if segment['id'] == 0 and not segment.get("merged", False):
-                old_start = segment["start"]
-                segment["start"] = start_timestamp
-                print(f"Corrected start time for first segment from {old_start} to {start_timestamp}")
-                break
-
-        if 'words' in transcript and transcript['words']:
-            first_word = transcript['words'][0]
-            old_word_start = first_word["start"]
-            first_word["start"] = start_timestamp
-            print(f"Corrected start time for first word from {old_word_start} to {start_timestamp}")
-
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)
 
-    print(f"Correction complete. Result saved to {output_file}.")
+    print(f"Transcription segmentation complete. Result saved to {output_file}.")
 
     return output_file

@@ -11,7 +11,7 @@ def split_audio(file_path, temp_audio_chunks_dir, max_size_mb=24):
     file_size = os.path.getsize(file_path)
 
     if file_size < max_size_mb * 1024 * 1024:
-        print(f"File {file_path} is smaller than {max_size_mb}MB, no need to split.")
+        print(f"Input audio-file {file_path} is smaller than {max_size_mb}MB, no need to split.")
         return [file_path]
 
     audio_duration_ms = len(audio)
@@ -30,7 +30,7 @@ def split_audio(file_path, temp_audio_chunks_dir, max_size_mb=24):
 
         chunks.append(chunk_path)
 
-    print(f"Split {file_path} into {len(chunks)} chunks of max {max_size_mb}MB each")
+    print(f"Split input audio-file {file_path} into {len(chunks)} chunks of max {max_size_mb}MB each")
     return chunks
 
 

@@ -6,15 +6,16 @@ import shutil
 
 
 class VideoProcessor:
-    def __init__(self, input_video_path, json_path, output_video_path, intro_outro_path, target_fps=25):
+    def __init__(self, job_id, input_video_path, json_path, output_video_path, intro_outro_path, target_fps=25, is_premium=False):
         """
         Video Processor initialization
 
         :param input_video_path: Path to original video file
         :param json_path: Path to segments' info JSON-file
         :param output_video_path: Output file path
-        :param intro_outro_path: Path to intro/outro file
+        :param intro_outro_path: Path to intro/outro files directory
         :param target_fps: Target FPS (25 by default)
+        :param is_premium: If True, no intro/outro will be added (default: False)
         """
 
         self.input_video_path = input_video_path
@@ -22,11 +23,12 @@ class VideoProcessor:
         self.output_video_path = output_video_path
         self.resources_dir = intro_outro_path
         self.target_fps = target_fps
+        self.is_premium = is_premium
 
         self._gpu_available = True
 
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.temp_dir = Path(os.path.join(script_dir, "temp_processing"))
+        self.temp_dir = Path(f"jobs/{job_id}/temp_video_processing")
+
         self.temp_dir.mkdir(exist_ok=True)
         self.segments_dir = self.temp_dir / "segments"
         self.processed_segments_dir = self.temp_dir / "processed_segments"
@@ -574,39 +576,46 @@ class VideoProcessor:
         main_width, main_height = self._get_video_resolution(self.converted_video_path)
         print(f"Main video resolution: {main_width}x{main_height}")
 
-        resources_dir = self.resources_dir
+        selected_intro_path = None
 
-        intro_4k_path = os.path.join(resources_dir, "intro_outro_4k.mp4")
-        intro_2k_path = os.path.join(resources_dir, "intro_outro_2k.mp4")
-        intro_fullhd_path = os.path.join(resources_dir, "intro_outro_full_hd.mp4")
+        if not self.is_premium:
+            print("Non-premium user - adding intro/outro")
+            resources_dir = self.resources_dir
 
-        selected_intro_path = intro_fullhd_path
+            intro_4k_path = os.path.join(resources_dir, "intro_outro_4k.mp4")
+            intro_2k_path = os.path.join(resources_dir, "intro_outro_2k.mp4")
+            intro_fullhd_path = os.path.join(resources_dir, "intro_outro_full_hd.mp4")
 
-        if main_width is not None and main_height is not None:
-            if main_width >= 3840 or main_height >= 2160:
-                if os.path.exists(intro_4k_path):
-                    selected_intro_path = intro_4k_path
-                    print(f"Using 4K intro/outro: {intro_4k_path}")
+            selected_intro_path = intro_fullhd_path
+
+            if main_width is not None and main_height is not None:
+                if main_width >= 3840 or main_height >= 2160:
+                    if os.path.exists(intro_4k_path):
+                        selected_intro_path = intro_4k_path
+                        print(f"Using 4K intro/outro: {intro_4k_path}")
+                    else:
+                        print(f"4K intro not found, using fallback")
+                elif main_width >= 2560 or main_height >= 1440:
+                    if os.path.exists(intro_2k_path):
+                        selected_intro_path = intro_2k_path
+                        print(f"Using 2K intro/outro: {intro_2k_path}")
+                    else:
+                        print(f"2K intro not found, using fallback")
+
+            if not os.path.exists(selected_intro_path):
+                print(f"Warning: Selected intro file {selected_intro_path} not found!")
+                intro_files = [f for f in os.listdir(resources_dir) if f.startswith("intro_outro_")]
+                if intro_files:
+                    selected_intro_path = os.path.join(resources_dir, intro_files[0])
+                    print(f"Using alternative intro: {selected_intro_path}")
                 else:
-                    print(f"4K intro not found, using fallback")
-            elif main_width >= 2560 or main_height >= 1440:
-                if os.path.exists(intro_2k_path):
-                    selected_intro_path = intro_2k_path
-                    print(f"Using 2K intro/outro: {intro_2k_path}")
-                else:
-                    print(f"2K intro not found, using fallback")
+                    print("No intro files found in resources directory!")
+                    selected_intro_path = None
 
-        if not os.path.exists(selected_intro_path):
-            print(f"Warning: Selected intro file {selected_intro_path} not found!")
-            intro_files = [f for f in os.listdir(resources_dir) if f.startswith("intro_outro_")]
-            if intro_files:
-                selected_intro_path = os.path.join(resources_dir, intro_files[0])
-                print(f"Using alternative intro: {selected_intro_path}")
-            else:
-                print("No intro files found in resources directory!")
-                return False
-
-        print(f"Selected intro/outro: {selected_intro_path}")
+            if selected_intro_path:
+                print(f"Selected intro/outro: {selected_intro_path}")
+        else:
+            print("Premium user - skipping intro/outro")
 
         # Step 1: Get a list of all input files in the correct order
         input_files = []
@@ -689,7 +698,7 @@ class VideoProcessor:
 
                     # Add frames to the list
                     for frame_path in extracted_frames:
-                        frame_list.write(f"file '{frame_path}'\n")
+                        frame_list.write(f"file '{os.path.abspath(frame_path)}'\n")
                         frame_list.write(f"duration {1.0 / self.target_fps}\n")
                         frame_count += 1
                         last_frame = frame_path
@@ -839,79 +848,18 @@ class VideoProcessor:
             self.process_segments()
 
             print("4. Combining final video using the reliable method...")
-            success = self.combine_final_video_reliable()
+            is_success = self.combine_final_video_reliable()
 
-            if success and os.path.exists(self.output_video_path):
+            if is_success and os.path.exists(self.output_video_path):
                 print(f"Done! Result saved to {self.output_video_path}")
                 self.cleanup()
             else:
                 print(f"Warning: final file was not found at {self.output_video_path}")
                 print("Temporary files will not be deleted for debugging purposes")
 
-            return success
+            return is_success
         except Exception as e:
             print(f"Processing error: {e}")
             import traceback
             traceback.print_exc()
             return False
-
-
-def main():
-    current_dir = os.path.abspath(os.getcwd())
-    input_dir = os.path.join(current_dir, "video_input")
-    output_dir = os.path.join(current_dir, "video_output")
-    resources_dir = os.path.join(current_dir, "resources")
-
-    input_video = os.path.join(input_dir, "input.mp4")
-    json_file = os.path.join(current_dir, "output", "timestamped_transcriptions", "input_timestamped_corrected_cleaned_optimized_adjusted_translated.json")
-    output_video = os.path.join(output_dir, "output.mp4")
-    # intro_outro = os.path.join(resources_dir, "intro_outro_converted.mp4")
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    print(f"Work dir: {current_dir}")
-    print(f"Input file dir: {input_dir}")
-    print(f"Resources dir: {resources_dir}")
-
-    if not os.path.exists(input_video):
-        print(f"Error: Input video not found: {input_video}")
-        return
-
-    if not os.path.exists(json_file):
-        print(f"Error: JSON-file not found: {json_file}")
-        return
-
-    if not os.path.exists(resources_dir):
-        print(f"Error: Resources directory not found: {resources_dir}")
-        return
-
-    intro_files = [f for f in os.listdir(resources_dir) if f.startswith("intro_outro_")]
-    if not intro_files:
-        print(f"Error: No intro/outro files found in resources directory: {resources_dir}")
-        print(f"Checking the contents of the resource directory:")
-        try:
-            for file in os.listdir(resources_dir):
-                print(f"  - {file}")
-        except Exception as e:
-            print(f"Error reading directory: {e}")
-        return
-
-    print(f"All necessary files found:")
-    print(f"  - Input video: {input_video}")
-    print(f"  - JSON-file: {json_file}")
-    print(f"  - Resources directory: {resources_dir}")
-    print(f"  - Available intro files: {', '.join(intro_files)}")
-
-    processor = VideoProcessor(
-        input_video_path=input_video,
-        json_path=json_file,
-        output_video_path=output_video,
-        intro_outro_path=resources_dir,
-        target_fps=25
-    )
-
-    processor.process()
-
-
-if __name__ == "__main__":
-    main()

@@ -4,8 +4,14 @@ import openai
 from utils.ai_utils import load_system_role_for_timestamped_translation
 
 
-def translate_transcript_segments(input_file, output_file=None):
-    system_role = load_system_role_for_timestamped_translation()
+def translate_transcribed_segments(input_file, output_file=None, target_language=None,
+                                   model="gpt-4o", openai_api_key=None):
+    if not openai_api_key:
+        raise ValueError("OpenAI API key is required but not provided by user")
+
+    system_role_template = load_system_role_for_timestamped_translation()
+
+    system_role = system_role_template.format(target_language=target_language)
 
     if output_file is None:
         base_dir = os.path.dirname(input_file)
@@ -19,6 +25,10 @@ def translate_transcript_segments(input_file, output_file=None):
     total_segments = len(segments)
 
     print(f"Starting translation of {total_segments} segments...")
+    print(f"Target language: {target_language}")
+    print(f"Using model: {model}")
+
+    client = openai.OpenAI(api_key=openai_api_key)
 
     for i, segment in enumerate(segments):
         current_text = segment.get("text", "").strip()
@@ -26,17 +36,17 @@ def translate_transcript_segments(input_file, output_file=None):
         prev_text = segments[i - 1].get("text", "").strip() if i > 0 else ""
         next_text = segments[i + 1].get("text", "").strip() if i < total_segments - 1 else ""
 
-        prompt = (f"Текст предыдущего сегмента:"
-                  f"{prev_text} (уже переведено, нужен только для понимания контекста)\n"
-                  f"Текст текущего сегмента для перевода: {current_text}\n"
-                  f"Текст следующего сегмента:"
-                  f"{next_text} (нужен только для понимания контекста)")
+        prompt = (
+            f"Previous segment text: {prev_text} (already translated, provided for context only)\n"
+            f"Current segment to translate: {current_text}\n"
+            f"Next segment text: {next_text} (provided for context only)"
+        )
 
         print(f"Translating segment {i + 1}/{total_segments}: {current_text[:50]}...")
 
         try:
-            response = openai.chat.completions.create(
-                model="gpt-4o",
+            response = client.chat.completions.create(
+                model=model,
                 messages=[
                     {"role": "system", "content": system_role},
                     {"role": "user", "content": prompt}
@@ -59,6 +69,7 @@ def translate_transcript_segments(input_file, output_file=None):
 
     translated_full_text = " ".join([s.get("translated_text", "") for s in segments])
     transcript["translated_text"] = translated_full_text
+    transcript["target_language"] = target_language
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)

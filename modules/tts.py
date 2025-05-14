@@ -3,24 +3,27 @@ import json
 import shutil
 import ssl
 import time
-
 import openai
 import requests
 from pydub import AudioSegment
-from dotenv import load_dotenv
 import subprocess
 
 
-def generate_tts_for_segments(translation_file, output_audio_file=None, voice="onyx", dealer="openai", intro=False, outro=False):
-    load_dotenv()
-    elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-    elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
+def generate_tts_for_segments(translation_file, job_id,output_audio_file=None, voice="onyx", dealer="openai",
+                              elevenlabs_api_key=None, openai_api_key=None):
+
+    if dealer.lower() == "elevenlabs" and not elevenlabs_api_key:
+        raise ValueError("ElevenLabs API key is required for ElevenLabs TTS but not provided by user")
+
+    if dealer.lower() == "openai" and not openai_api_key:
+        raise ValueError("OpenAI API key is required for OpenAI TTS but not provided by user")
+
+    base_dir = f"jobs/{job_id}/output"
 
     if output_audio_file is None:
-        base_dir = os.path.dirname(translation_file)
         audio_result_dir = os.path.join(base_dir, "audio_result")
         os.makedirs(audio_result_dir, exist_ok=True)
-        output_audio_file = os.path.join(audio_result_dir, f"en_audio.mp3")
+        output_audio_file = os.path.join(audio_result_dir, f"new_audio.mp3")
 
     os.makedirs(os.path.dirname(output_audio_file), exist_ok=True)
 
@@ -34,10 +37,10 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
     print(f"Uploaded {len(segments)} segments for voice-over using {dealer}")
 
-    segments_dir = os.path.join(os.path.dirname(translation_file), "audio_segments")
+    segments_dir = os.path.join(base_dir, "audio_segments")
     os.makedirs(segments_dir, exist_ok=True)
 
-    temp_dir = os.path.join(os.path.dirname(translation_file), "temp_audio_segments")
+    temp_dir = os.path.join(base_dir, "temp_audio_segments")
     os.makedirs(temp_dir, exist_ok=True)
 
     generated_segments = []
@@ -62,7 +65,9 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
 
         try:
             if dealer.lower() == "openai":
-                response = openai.audio.speech.create(
+                client = openai.OpenAI(api_key=openai_api_key)
+
+                response = client.audio.speech.create(
                     model="tts-1",
                     voice=voice,
                     input=text
@@ -112,7 +117,7 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
                 headers = {"xi-api-key": elevenlabs_api_key}
 
                 response = make_api_request_with_retry(
-                    f"https://api.elevenlabs.io/v1/text-to-speech/{elevenlabs_voice_id}/stream",
+                    f"https://api.elevenlabs.io/v1/text-to-speech/{voice}/stream",
                     request_data,
                     headers
                 )
@@ -174,12 +179,16 @@ def generate_tts_for_segments(translation_file, output_audio_file=None, voice="o
             continue
 
     print("Assembling final audio file...")
-    assemble_audio_file(generated_segments, output_audio_file, intro, outro)
+    assemble_audio_file(generated_segments, output_audio_file)
 
     shutil.rmtree(temp_dir)
 
     with open(translation_file, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+    print(f"\nTTS generation completed successfully!")
+    print(f"Individual segments saved in: {segments_dir}")
+    print(f"Final audio saved to: {output_audio_file}")
 
     return output_audio_file
 
@@ -189,7 +198,7 @@ def match_target_amplitude(sound, target_dBFS):
     return sound.apply_gain(change_in_dBFS)
 
 
-def assemble_audio_file(segments, output_file, intro=False, outro=False):
+def assemble_audio_file(segments, output_file):
     if not segments:
         print("No segments to assemble")
         return None
@@ -197,66 +206,24 @@ def assemble_audio_file(segments, output_file, intro=False, outro=False):
     segments.sort(key=lambda x: x["start_time_ms"])
 
     final_audio = AudioSegment.empty()
-
-    intro_outro_file = "resources/intro_outro.mp3"
-    intro_length_ms = 4000
-
-    if intro and os.path.exists(intro_outro_file):
-        special_audio = AudioSegment.from_file(intro_outro_file)
-        special_audio = match_target_amplitude(special_audio, -16.0)
-
-        if len(special_audio) < intro_length_ms:
-            print(f"Warning: intro audio is shorter than {intro_length_ms}ms")
-            intro_length_ms = len(special_audio)
-
-        final_audio += special_audio[:intro_length_ms]
-        print(f"Added intro at the beginning (first {intro_length_ms / 1000} seconds)")
-
-        has_intro = True
-    else:
-        has_intro = False
-        if intro and not os.path.exists(intro_outro_file):
-            print(f"Warning: Intro file {intro_outro_file} not found, skipping intro")
-
-    current_position = intro_length_ms if has_intro else 0
+    current_position = 0
 
     for segment in segments:
         segment_audio = AudioSegment.from_file(segment["file"])
         segment_audio = match_target_amplitude(segment_audio, -16.0)
 
-        if has_intro and segment == segments[0]:
-            # First segment after intro should be placed right after intro
-            # (its original position of 4000ms is already accounted for by the intro)
-            position = current_position
+        if segment == segments[0]:
+            position = segment["start_time_ms"]
         else:
-            # For segments without intro or non-first segments, use their relative positions
-            # If intro is present, we need to account for any shifts in timing
-            if has_intro and segment["start_time_ms"] < intro_length_ms:
-                # Skip any segment that would overlap with the intro
-                continue
-
-            if segment != segments[0]:
-                prev_segment = segments[segments.index(segment) - 1]
-                position = current_position + (segment["start_time_ms"] - prev_segment["end_time_ms"])
-            else:
-                position = segment["start_time_ms"]
+            prev_segment = segments[segments.index(segment) - 1]
+            position = current_position + (segment["start_time_ms"] - prev_segment["end_time_ms"])
 
         if position > len(final_audio):
             silence_needed = position - len(final_audio)
             final_audio += AudioSegment.silent(duration=silence_needed)
 
         final_audio += segment_audio
-
         current_position = len(final_audio)
-
-    # Add outro if needed
-    if outro and os.path.exists(intro_outro_file):
-        special_audio = AudioSegment.from_file(intro_outro_file)
-        special_audio = match_target_amplitude(special_audio, -16.0)
-        final_audio += special_audio
-        print(f"Added outro to the end of the audio file")
-    elif outro:
-        print(f"Warning: Outro file {intro_outro_file} not found, skipping outro")
 
     final_audio.export(output_file, format="mp3", bitrate="192k")
     print(f"Final audio assembled and saved to {output_file}")
@@ -289,12 +256,13 @@ def assemble_audio_file(segments, output_file, intro=False, outro=False):
     return output_file
 
 
-def reassemble_audio_file(translation_file, output_audio_file=None, intro=False, outro=False):
+def reassemble_audio_file(translation_file, job_id, output_audio_file=None):
+    base_dir = f"jobs/{job_id}/output"
+
     if output_audio_file is None:
-        base_dir = os.path.dirname(translation_file)
         audio_result_dir = os.path.join(base_dir, "audio_result")
         os.makedirs(audio_result_dir, exist_ok=True)
-        output_audio_file = os.path.join(audio_result_dir, f"en_audio_reassembled.mp3")
+        output_audio_file = os.path.join(audio_result_dir, f"new_audio_reassembled.mp3")
 
     with open(translation_file, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -304,7 +272,7 @@ def reassemble_audio_file(translation_file, output_audio_file=None, intro=False,
         print("Error: There are no segments in the transcription file.")
         return None
 
-    segments_dir = os.path.join(os.path.dirname(translation_file), "audio_segments")
+    segments_dir = os.path.join(base_dir, "audio_segments")
 
     if not os.path.exists(segments_dir):
         print(f"Error: Segments directory {segments_dir} not found. Have you generated the segments first?")
@@ -326,7 +294,6 @@ def reassemble_audio_file(translation_file, output_audio_file=None, intro=False,
                 "end_time_ms": end_time_ms,
                 "file": segment_file
             })
-            # print(f"Found segment {i} at {segment_file}")
         else:
             missing_segments.append(i)
 
@@ -338,7 +305,7 @@ def reassemble_audio_file(translation_file, output_audio_file=None, intro=False,
         print("Proceeding with available segments only.")
 
     print(f"Reassembling audio file from {len(available_segments)} segments...")
-    result = assemble_audio_file(available_segments, output_audio_file, intro, outro)
+    result = assemble_audio_file(available_segments, output_audio_file)
 
     return result
 
