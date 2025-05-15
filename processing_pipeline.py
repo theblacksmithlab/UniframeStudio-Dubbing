@@ -18,6 +18,25 @@ def run_command(command):
         return False
 
 
+def update_job_status_file(job_id, step, total_steps, description):
+    status_file = f"jobs/{job_id}/status.json"
+
+    if os.path.exists(status_file):
+        with open(status_file, 'r') as f:
+            status = json.load(f)
+    else:
+        status = {}
+
+    status.update({
+        "step": step,
+        "total_steps": total_steps,
+        "description": description,
+        "progress_percentage": round((step / total_steps) * 100)
+    })
+
+    with open(status_file, 'w') as f:
+        json.dump(status, f, indent=2)
+
 def process_job(job_id, source_language=None, target_language=None, tts_provider=None, tts_voice=None,
                 elevenlabs_api_key=None, openai_api_key=None, is_premium=False):
     job_dir = f"jobs/{job_id}"
@@ -72,6 +91,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"TTS voice: {tts_voice}")
 
     # [Step 1]
+    update_job_status_file(job_id, 1, 10, "Extracting audio from video...")
     print(f"\n{'=' * 25}")
     print(f"\n[Step 1] Extracting audio from video {video_path}...")
     audio_path = f"{audio_input_dir}/{base_name}.mp3"
@@ -97,6 +117,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 2]
+    update_job_status_file(job_id, 2, 10, "Transcribing extracted audio...")
     print(f"\n{'=' * 25}")
     print(f"\n[Step 2] Transcribing audio {os.path.basename(audio_path)}...")
     transcription_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed.json")
@@ -129,6 +150,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 3]
+    update_job_status_file(job_id, 3, 10, "Structuring transcription...")
     print(f"\n{'=' * 25}")
     print(f"\n[Step 3] Structuring transcription {os.path.basename(transcription_path)}...")
     corrected_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected.json")
@@ -154,6 +176,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 4]
+    update_job_status_file(job_id, 4, 10, "Cleaning transcription...")
     print(f"\n{'=' * 25}")
     print(f"\n[Step 4] Cleaning transcription {os.path.basename(corrected_path)}...")
     cleaned_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned.json")
@@ -179,6 +202,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 5]
+    update_job_status_file(job_id, 5, 10, "Optimizing transcription...")
     print(f"\n{'=' * 25}")
     print(f"\n[Step 5] Optimizing segments in transcription {os.path.basename(cleaned_path)}...")
     optimized_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned_optimized.json")
@@ -204,8 +228,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 6]
+    update_job_status_file(job_id, 6, 10, "Adjusting transcription segments timing...")
     print(f"\n{'=' * 25}")
-    print(f"\n[Step 6] Adjusting segment timing in transcription {os.path.basename(optimized_path)}...")
+    print(f"\n[Step 6] Adjusting segments timing in transcription {os.path.basename(optimized_path)}...")
     adjusted_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned_optimized_adjusted.json")
     adjust_cmd = [sys.executable, "cli.py", "adjust_timing", "--input", optimized_path, "--output", adjusted_path]
 
@@ -229,8 +254,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 7]
+    update_job_status_file(job_id, 7, 10, "Translating transcription segments...")
     print(f"\n{'=' * 25}")
-    print(f"\n[Step 7] Translating segments in {os.path.basename(adjusted_path)}...")
+    print(f"\n[Step 7] Translating transcription segments in {os.path.basename(adjusted_path)}...")
     translated_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned_optimized_adjusted_translated.json")
     translate_cmd = [sys.executable, "cli.py", "translate", "--input", adjusted_path, "--output", translated_path]
 
@@ -259,6 +285,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 8]
+    update_job_status_file(job_id, 8, 10, "Generating TTS segments...")
     print(f"\n{'=' * 25}")
     print(f"\n[Step 8] Generating audio using {tts_provider} with voice {tts_voice}...")
 
@@ -323,6 +350,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 9]
+    update_job_status_file(job_id, 9, 10, "Segments translation automatic correction...")
     print(f"\n{'=' * 25}")
     print(f"\n[Step 9] Auto-correcting segment durations...")
     auto_correct_cmd = [sys.executable, "cli.py", "auto-correct",
@@ -367,6 +395,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 10]
+    update_job_status_file(job_id, 10, 10, "Correcting source video duration...")
     print(f"\n{'=' * 25}")
     print(f"\n[Step 10] Processing video with new audio...")
     video_result_dir = os.path.join(result_output_dir, "video_result")
@@ -375,11 +404,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     process_video_cmd = [sys.executable, "cli.py", "process_video",
                          "--job_id", job_id,
-                         "--is_premium", is_premium,
                          "--input_video", video_path,
                          "--json_file", translated_path,
                          "--output_video", final_video_path,
                          "--resources_dir", "resources"]
+
+    if is_premium:
+        process_video_cmd.append("--is_premium")
 
     if not run_command(process_video_cmd):
         return {
@@ -513,7 +544,8 @@ def main():
     parser.add_argument("--tts_voice", required=True, help="Voice identifier for TTS")
     parser.add_argument("--elevenlabs_api_key", help="ElevenLabs API key (optional)")
     parser.add_argument("--openai_api_key", help="OpenAI API key (optional)")
-    parser.add_argument("--is_premium", required=True, help="User's subscription status")
+    parser.add_argument("--is_premium", action="store_true",
+                        help="User's subscription status")
 
     args = parser.parse_args()
 

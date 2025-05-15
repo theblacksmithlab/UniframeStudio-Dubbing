@@ -12,7 +12,7 @@ from modules.transcription_correction import correct_transcript_segments
 from modules.translation import translate_transcribed_segments
 from modules.tts import generate_tts_for_segments, reassemble_audio_file
 # from modules.tts_correction import regenerate_segment
-from modules.video_duration_edit_workflow import VideoProcessor
+from modules.video_processor import VideoProcessor
 from modules.video_to_audio_conversion import extract_audio
 from modules.optimized_segmentation import optimize_transcription_segments
 from modules.automatic_text_correction import correct_segment_durations
@@ -136,7 +136,7 @@ def main():
     video_parser.add_argument("--json_file", required=True, help="Path to translated JSON with timing")
     video_parser.add_argument("--output_video", required=True, help="Path for output video")
     video_parser.add_argument("--resources_dir", required=True, help="Path to resources directory")
-    video_parser.add_argument("--is_premium", action="store_true", required=True,
+    video_parser.add_argument("--is_premium", action="store_true",
                               help="Premium user (no intro/outro)")
 
     args = parser.parse_args()
