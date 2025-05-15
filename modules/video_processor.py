@@ -44,7 +44,7 @@ class VideoProcessor:
         self.needs_fps_conversion = abs(self.input_fps - target_fps) > 0.01
         self.converted_video_path = self.temp_dir / "converted_input.mp4"
 
-    def _run_command(self, cmd, **kwargs):
+    def _run_command_old(self, cmd, **kwargs):
         """Safely execute external command with minimal logging"""
         try:
             # Set capture_output=True by default if not specified
@@ -65,6 +65,30 @@ class VideoProcessor:
                 # Only print error output if it exists and is short
                 if hasattr(result, 'stderr') and result.stderr and len(result.stderr) < 200:
                     print(f"Error: {result.stderr.strip()}")
+                raise subprocess.CalledProcessError(result.returncode, cmd)
+
+            return result
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            raise
+
+    def _run_command(self, cmd, **kwargs):
+        """Safely execute external command with full logging for debugging"""
+        try:
+            if 'capture_output' not in kwargs:
+                kwargs['capture_output'] = True
+
+            command_str = ' '.join(map(str, cmd))
+            print(f"Executing: {command_str[:100]}...")
+
+            result = subprocess.run(cmd, text=True, **kwargs)
+
+            if result.returncode != 0:
+                print(f"Command failed with code {result.returncode}")
+                if hasattr(result, 'stderr') and result.stderr:
+                    print(f"FULL ERROR OUTPUT:\n{result.stderr}")
+                if hasattr(result, 'stdout') and result.stdout:
+                    print(f"STDOUT:\n{result.stdout}")
                 raise subprocess.CalledProcessError(result.returncode, cmd)
 
             return result
@@ -772,6 +796,23 @@ class VideoProcessor:
 
         # Строим команду FFmpeg
         ffmpeg_inputs = []
+
+        #new
+        print("Checking all input files exist and are readable:")
+        for file_path, file_id in input_files:
+            if not os.path.exists(file_path):
+                print(f"ERROR: File not found: {file_path}")
+                return False
+
+            # Проверим, что файл читается ffprobe
+            try:
+                duration = self._get_video_duration(file_path)
+                print(f"  {file_id}: {duration:.3f}s - OK")
+            except Exception as e:
+                print(f"  {file_id}: ERROR - {e}")
+                return False
+
+        # old
         for file_path, file_id in input_files:
             ffmpeg_inputs.extend(['-i', file_path])
 
@@ -783,16 +824,20 @@ class VideoProcessor:
                 '-filter_complex', filter_graph,
                 '-map', '[outv]',
                 '-c:v', 'h264_nvenc',
-                '-b:v', '100M',
-                '-bufsize', '100M',
+                '-b:v', '200M',  # Увеличенный битрейт для максимального качества
+                '-bufsize', '200M',
                 '-rc', 'vbr',
                 '-rc-lookahead', '32',
                 '-spatial_aq', '1',
                 '-temporal_aq', '1',
                 '-aq-strength', '15',
-                '-preset', 'p7',
-                '-tune', 'hq',
-                '-pix_fmt', 'yuv420p',
+                '-qmin', '0',  # Минимальный квантизатор
+                '-qmax', '25',  # Максимальный квантизатор
+                '-profile:v', 'high',  # High profile
+                '-level', '5.1',  # Высокий level
+                '-preset', 'p7',  # Максимальное качество
+                '-tune', 'hq',  # High quality tuning
+                '-pix_fmt', 'yuv444p',  # Без субсэмплинга для максимального качества
                 '-movflags', '+faststart',
                 str(temp_output)
             ]
