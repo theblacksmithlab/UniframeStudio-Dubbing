@@ -783,20 +783,20 @@ class VideoProcessor:
                 '-filter_complex', filter_graph,
                 '-map', '[outv]',
                 '-c:v', 'h264_nvenc',
-                '-b:v', '200M',  # Увеличенный битрейт для максимального качества
+                '-b:v', '200M',
                 '-bufsize', '200M',
                 '-rc', 'vbr',
                 '-rc-lookahead', '32',
                 '-spatial_aq', '1',
                 '-temporal_aq', '1',
                 '-aq-strength', '15',
-                '-qmin', '0',  # Минимальный квантизатор
-                '-qmax', '25',  # Максимальный квантизатор
-                '-profile:v', 'high',  # High profile
-                '-level', '5.1',  # Высокий level
-                '-preset', 'p7',  # Максимальное качество
-                '-tune', 'hq',  # High quality tuning
-                '-pix_fmt', 'yuv444p',  # Без субсэмплинга для максимального качества
+                '-qmin', '0',
+                '-qmax', '25',
+                '-profile:v', 'high',
+                '-level', '5.1',
+                '-preset', 'p7',
+                '-tune', 'hq',
+                '-pix_fmt', 'yuv420p',
                 '-movflags', '+faststart',
                 str(temp_output)
             ]
