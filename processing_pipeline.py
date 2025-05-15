@@ -507,7 +507,8 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         os.path.join(job_base_dir, "audio_input"),
         os.path.join(job_base_dir, "timestamped_transcriptions"),
         os.path.join(job_base_dir, "output"),
-        os.path.join(job_base_dir, "job_params.json")
+        os.path.join(job_base_dir, "job_params.json"),
+        os.path.join(job_base_dir, "status.json")
     ]
 
     for path in cleanup_paths:

@@ -318,6 +318,9 @@ class VideoProcessor:
         segments = self.data.get('segments', [])
         video_path = self.converted_video_path
 
+        total_duration = self._get_video_duration(video_path)
+        print(f"Total video duration: {total_duration:.4f} seconds")
+
         has_gpu = self._check_gpu_availability()
 
         if has_gpu:
@@ -344,6 +347,60 @@ class VideoProcessor:
             quality_params = ['-crf', '0']  # Lossless quality
             preset = 'veryslow'  # Highest quality preset
             extra_params = ['-tune', 'film']
+
+        if segments and segments[0]['start'] > 0.01:
+            initial_gap_start = 0.0
+            initial_gap_end = segments[0]['start']
+            initial_gap_path = self.gaps_dir / f"gap_start_0000.mp4"
+
+            print(f"Extracting initial gap: {initial_gap_start} - {initial_gap_end}")
+
+            try:
+                if has_gpu:
+                    gap_cmd = [
+                        'ffmpeg',
+                        '-i', str(video_path),
+                        '-ss', str(initial_gap_start),
+                        '-to', str(initial_gap_end),
+                        '-c:v', encoder,
+                        '-b:v', '50M',
+                        '-rc', 'vbr',
+                        '-preset', 'p5',
+                        '-pix_fmt', pixel_format,
+                        '-an',
+                        str(initial_gap_path)
+                    ]
+                else:
+                    gap_cmd = [
+                        'ffmpeg',
+                        '-i', str(video_path),
+                        '-ss', str(initial_gap_start),
+                        '-to', str(initial_gap_end),
+                        '-c:v', 'libx264',
+                        '-crf', '18',
+                        '-preset', 'medium',
+                        '-pix_fmt', 'yuv420p',
+                        '-an',
+                        str(initial_gap_path)
+                    ]
+
+                self._run_command(gap_cmd)
+
+            except Exception as e:
+                print(f"Error while extracting initial gap: {e}")
+                fallback_gap_cmd = [
+                    'ffmpeg',
+                    '-i', str(video_path),
+                    '-ss', str(initial_gap_start),
+                    '-to', str(initial_gap_end),
+                    '-c:v', 'libx264',
+                    '-crf', '18',
+                    '-preset', 'medium',
+                    '-an',
+                    str(initial_gap_path)
+                ]
+                self._run_command(fallback_gap_cmd)
+
 
         for i, segment in enumerate(segments):
             start = segment['start']
@@ -438,6 +495,59 @@ class VideoProcessor:
                             str(gap_path)
                         ]
                         self._run_command(fallback_gap_cmd)
+
+        if segments and segments[-1]['end'] < total_duration - 0.01:
+            final_gap_start = segments[-1]['end']
+            final_gap_end = total_duration
+            final_gap_path = self.gaps_dir / f"gap_{len(segments) - 1:04d}_end.mp4"
+
+            print(f"Extracting final gap: {final_gap_start} - {final_gap_end}")
+
+            try:
+                if has_gpu:
+                    gap_cmd = [
+                        'ffmpeg',
+                        '-i', str(video_path),
+                        '-ss', str(final_gap_start),
+                        '-to', str(final_gap_end),
+                        '-c:v', encoder,
+                        '-b:v', '50M',
+                        '-rc', 'vbr',
+                        '-preset', 'p5',
+                        '-pix_fmt', pixel_format,
+                        '-an',
+                        str(final_gap_path)
+                    ]
+                else:
+                    gap_cmd = [
+                        'ffmpeg',
+                        '-i', str(video_path),
+                        '-ss', str(final_gap_start),
+                        '-to', str(final_gap_end),
+                        '-c:v', 'libx264',
+                        '-crf', '18',
+                        '-preset', 'medium',
+                        '-pix_fmt', 'yuv420p',
+                        '-an',
+                        str(final_gap_path)
+                    ]
+
+                self._run_command(gap_cmd)
+
+            except Exception as e:
+                print(f"Error while extracting final gap: {e}")
+                fallback_gap_cmd = [
+                    'ffmpeg',
+                    '-i', str(video_path),
+                    '-ss', str(final_gap_start),
+                    '-to', str(final_gap_end),
+                    '-c:v', 'libx264',
+                    '-crf', '18',
+                    '-preset', 'medium',
+                    '-an',
+                    str(final_gap_path)
+                ]
+                self._run_command(fallback_gap_cmd)
 
     def process_segments(self):
         """Processing all segments with changes in their duration"""
@@ -566,6 +676,216 @@ class VideoProcessor:
                 # Continue with the next segment instead of stopping completely
 
     def combine_final_video_reliable(self):
+        """Direct video combining using filter_complex for maximum quality"""
+        segments = self.data.get('segments', [])
+        temp_output = self.temp_dir / "temp_output.mp4"
+
+        main_width, main_height = self._get_video_resolution(self.converted_video_path)
+        print(f"Main video resolution: {main_width}x{main_height}")
+
+        selected_intro_path = None
+
+        if not self.is_premium:
+            print("Non-premium user - adding intro/outro")
+            resources_dir = self.resources_dir
+
+            intro_4k_path = os.path.join(resources_dir, "intro_outro_4k.mp4")
+            intro_2k_path = os.path.join(resources_dir, "intro_outro_2k.mp4")
+            intro_fullhd_path = os.path.join(resources_dir, "intro_outro_full_hd.mp4")
+
+            selected_intro_path = intro_fullhd_path
+
+            if main_width is not None and main_height is not None:
+                if main_width >= 3840 or main_height >= 2160:
+                    if os.path.exists(intro_4k_path):
+                        selected_intro_path = intro_4k_path
+                        print(f"Using 4K intro/outro: {intro_4k_path}")
+                    else:
+                        print(f"4K intro not found, using fallback")
+                elif main_width >= 2560 or main_height >= 1440:
+                    if os.path.exists(intro_2k_path):
+                        selected_intro_path = intro_2k_path
+                        print(f"Using 2K intro/outro: {intro_2k_path}")
+                    else:
+                        print(f"2K intro not found, using fallback")
+
+            if not os.path.exists(selected_intro_path):
+                print(f"Warning: Selected intro file {selected_intro_path} not found!")
+                intro_files = [f for f in os.listdir(resources_dir) if f.startswith("intro_outro_")]
+                if intro_files:
+                    selected_intro_path = os.path.join(resources_dir, intro_files[0])
+                    print(f"Using alternative intro: {selected_intro_path}")
+                else:
+                    print("No intro files found in resources directory!")
+                    selected_intro_path = None
+
+            if selected_intro_path:
+                print(f"Selected intro/outro: {selected_intro_path}")
+        else:
+            print("Premium user - skipping intro/outro")
+
+        # Step 1: Get a list of all input files in the correct order
+        input_files = []
+
+        # Adding an intro
+        if selected_intro_path:
+            input_files.append((str(selected_intro_path), "intro"))
+
+        # Add initial gap if exists
+        initial_gap_path = self.gaps_dir / "gap_start_0000.mp4"
+        if initial_gap_path.exists():
+            input_files.append((str(initial_gap_path), "gap_start_0000"))
+
+        # Add segments and gaps
+        for i in range(len(segments)):
+            # Add the processed segment
+            segment_path = self.processed_segments_dir / f"processed_segment_{i:04d}.mp4"
+            if os.path.exists(segment_path):
+                input_files.append((str(segment_path), f"segment_{i:04d}"))
+            else:
+                print(f"Warning: Processed segment not found: {segment_path}")
+
+            # Check for a gap after a segment
+            gap_path = self.gaps_dir / f"gap_{i:04d}_{i + 1:04d}.mp4"
+            if gap_path.exists():
+                input_files.append((str(gap_path), f"gap_{i:04d}_{i + 1:04d}"))
+
+        # Add final gap if exists
+        final_gap_path = self.gaps_dir / f"gap_{len(segments) - 1:04d}_end.mp4"
+        if final_gap_path.exists():
+            input_files.append((str(final_gap_path), f"gap_{len(segments) - 1:04d}_end"))
+
+        # Adding an outro
+        if selected_intro_path:
+            input_files.append((str(selected_intro_path), "outro"))
+
+        print(f"Total files to merge: {len(input_files)}")
+
+        has_gpu = self._check_gpu_availability()
+
+        # Строим filter_complex для прямого склеивания
+        filter_parts = []
+        for i in range(len(input_files)):
+            filter_parts.append(f"[{i}:v]")
+
+        filter_graph = f"{''.join(filter_parts)}concat=n={len(input_files)}:v=1:a=0[outv]"
+
+        # Строим команду FFmpeg
+        ffmpeg_inputs = []
+        for file_path, file_id in input_files:
+            ffmpeg_inputs.extend(['-i', file_path])
+
+        if has_gpu:
+            print("Using NVIDIA GPU for direct video combining with maximum quality")
+            cmd = [
+                'ffmpeg',
+                *ffmpeg_inputs,
+                '-filter_complex', filter_graph,
+                '-map', '[outv]',
+                '-c:v', 'h264_nvenc',
+                '-b:v', '200M',  # Увеличенный битрейт для максимального качества
+                '-bufsize', '200M',
+                '-rc', 'vbr',
+                '-rc-lookahead', '32',
+                '-spatial_aq', '1',
+                '-temporal_aq', '1',
+                '-aq-strength', '15',
+                '-qmin', '0',  # Минимальный квантизатор
+                '-qmax', '25',  # Максимальный квантизатор
+                '-profile:v', 'high',  # High profile
+                '-level', '5.1',  # Высокий level
+                '-preset', 'p7',  # Максимальное качество
+                '-tune', 'hq',  # High quality tuning
+                '-pix_fmt', 'yuv444p',  # Без субсэмплинга для максимального качества
+                '-movflags', '+faststart',
+                str(temp_output)
+            ]
+        else:
+            print("GPU not detected or not supported. Using CPU with maximum quality")
+            cmd = [
+                'ffmpeg',
+                *ffmpeg_inputs,
+                '-filter_complex', filter_graph,
+                '-map', '[outv]',
+                '-c:v', 'libx264',
+                '-crf', '0',  # Lossless
+                '-preset', 'veryslow',  # Максимальное качество
+                '-tune', 'film',
+                '-pix_fmt', 'yuv444p',  # Без субсэмплинга
+                '-movflags', '+faststart',
+                str(temp_output)
+            ]
+
+        try:
+            self._run_command(cmd)
+
+            if not os.path.exists(temp_output) and has_gpu:
+                print("Error using GPU. Trying CPU fallback...")
+                # CPU fallback
+                cpu_cmd = [
+                    'ffmpeg',
+                    *ffmpeg_inputs,
+                    '-filter_complex', filter_graph,
+                    '-map', '[outv]',
+                    '-c:v', 'libx264',
+                    '-crf', '0',
+                    '-preset', 'veryslow',
+                    '-tune', 'film',
+                    '-pix_fmt', 'yuv444p',
+                    '-movflags', '+faststart',
+                    str(temp_output)
+                ]
+                self._run_command(cpu_cmd)
+        except Exception as e:
+            print(f"Error during video assembly: {e}")
+            if has_gpu:
+                print("Trying CPU fallback for final assembly...")
+                # CPU fallback
+                cpu_cmd = [
+                    'ffmpeg',
+                    *ffmpeg_inputs,
+                    '-filter_complex', filter_graph,
+                    '-map', '[outv]',
+                    '-c:v', 'libx264',
+                    '-crf', '0',
+                    '-preset', 'veryslow',
+                    '-tune', 'film',
+                    '-pix_fmt', 'yuv444p',
+                    '-movflags', '+faststart',
+                    str(temp_output)
+                ]
+                self._run_command(cpu_cmd)
+
+        if os.path.exists(temp_output):
+            video_duration = self._get_video_duration(temp_output)
+            print(f"Video successfully created! Duration: {video_duration:.4f} sec")
+
+            # Copy video to output directory
+            shutil.copy(temp_output, self.output_video_path)
+            print(f"Result saved to {self.output_video_path}")
+
+            # Verify file was copied correctly
+            if os.path.exists(self.output_video_path):
+                print(f"Verification: file successfully copied to {self.output_video_path}")
+                print(f"File size: {os.path.getsize(self.output_video_path) / (1024 * 1024):.2f} MB")
+            else:
+                print(f"Error: file was not copied to {self.output_video_path}")
+                # Try alternative copy method
+                try:
+                    os.system(f'cp "{temp_output}" "{self.output_video_path}"')
+                    if os.path.exists(self.output_video_path):
+                        print(f"File successfully copied using alternative method")
+                    else:
+                        print(f"Error: could not copy file even with alternative method")
+                except Exception as e:
+                    print(f"Error with alternative copying: {e}")
+
+            return True
+        else:
+            print("Error: Failed to create final video!")
+            return False
+
+    def combine_final_video_reliable_old_(self):
         """A Robust Method for Combining Videos via Intermediate Images"""
         segments = self.data.get('segments', [])
         frames_dir = self.temp_dir / "frames"
@@ -623,6 +943,11 @@ class VideoProcessor:
         # Adding an intro
         input_files.append((str(selected_intro_path), "intro"))
 
+        # Add initial gap if exists
+        initial_gap_path = self.gaps_dir / "gap_start_0000.mp4"
+        if initial_gap_path.exists():
+            input_files.append((str(initial_gap_path), "gap_start_0000"))
+
         # Add segments and gaps
         for i in range(len(segments)):
             # Add the processed segment
@@ -636,6 +961,11 @@ class VideoProcessor:
             gap_path = self.gaps_dir / f"gap_{i:04d}_{i + 1:04d}.mp4"
             if gap_path.exists():
                 input_files.append((str(gap_path), f"gap_{i:04d}_{i + 1:04d}"))
+
+        # Add final gap if exists
+        final_gap_path = self.gaps_dir / f"gap_{len(segments) - 1:04d}_end.mp4"
+        if final_gap_path.exists():
+            input_files.append((str(final_gap_path), f"gap_{len(segments) - 1:04d}_end"))
 
         # Adding an outro
         input_files.append((str(selected_intro_path), "outro"))
