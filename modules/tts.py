@@ -9,7 +9,7 @@ from pydub import AudioSegment
 import subprocess
 
 
-def generate_tts_for_segments(translation_file, job_id,output_audio_file=None, voice="onyx", dealer="openai",
+def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, voice="onyx", dealer="openai",
                               elevenlabs_api_key=None, openai_api_key=None):
 
     if dealer.lower() == "elevenlabs" and not elevenlabs_api_key:
@@ -154,7 +154,7 @@ def generate_tts_for_segments(translation_file, job_id,output_audio_file=None, v
 
             diff_ratio = abs(actual_duration_ms - original_duration_ms) / original_duration_ms
             if diff_ratio > 0.2:
-                print(f"  WARNING! TTS duration differs from target by more than 20% ({diff_ratio:.2%})")
+                print(f"WARNING! TTS duration differs from target by more than 20% ({diff_ratio:.2%})")
 
             data["segments"][i]["speed_ratio"] = round(diff_ratio, 2)
 
@@ -179,7 +179,7 @@ def generate_tts_for_segments(translation_file, job_id,output_audio_file=None, v
             continue
 
     print("Assembling final audio file...")
-    assemble_audio_file(generated_segments, output_audio_file)
+    assemble_audio_file(generated_segments, output_audio_file, data)
 
     shutil.rmtree(temp_dir)
 
@@ -198,7 +198,7 @@ def match_target_amplitude(sound, target_dBFS):
     return sound.apply_gain(change_in_dBFS)
 
 
-def assemble_audio_file(segments, output_file):
+def assemble_audio_file(segments, output_file, json_data=None):
     if not segments:
         print("No segments to assemble")
         return None
@@ -224,6 +224,12 @@ def assemble_audio_file(segments, output_file):
 
         final_audio += segment_audio
         current_position = len(final_audio)
+
+    if json_data and "outro_gap_duration" in json_data:
+        outro_gap_duration_ms = json_data["outro_gap_duration"] * 1000
+        if outro_gap_duration_ms > 0:
+            final_audio += AudioSegment.silent(duration=outro_gap_duration_ms)
+            print(f"Added {outro_gap_duration_ms:.0f}ms outro gap from original")
 
     final_audio.export(output_file, format="mp3", bitrate="192k")
     print(f"Final audio assembled and saved to {output_file}")
@@ -255,14 +261,13 @@ def assemble_audio_file(segments, output_file):
 
     return output_file
 
-
 def reassemble_audio_file(translation_file, job_id, output_audio_file=None):
     base_dir = f"jobs/{job_id}/output"
 
     if output_audio_file is None:
         audio_result_dir = os.path.join(base_dir, "audio_result")
         os.makedirs(audio_result_dir, exist_ok=True)
-        output_audio_file = os.path.join(audio_result_dir, f"new_audio_reassembled.mp3")
+        output_audio_file = os.path.join(audio_result_dir, f"new_audio.mp3")
 
     with open(translation_file, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -305,7 +310,7 @@ def reassemble_audio_file(translation_file, job_id, output_audio_file=None):
         print("Proceeding with available segments only.")
 
     print(f"Reassembling audio file from {len(available_segments)} segments...")
-    result = assemble_audio_file(available_segments, output_audio_file)
+    result = assemble_audio_file(available_segments, output_audio_file, data)
 
     return result
 

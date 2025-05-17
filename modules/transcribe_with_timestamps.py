@@ -1,12 +1,27 @@
 import json
 import os
 import shutil
+import subprocess
 from pydub import AudioSegment
 from utils.audio_utils import split_audio
 import openai
 
 
 def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, output_file=None, openai_api_key=None):
+    def get_precise_audio_duration(file_path):
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            file_path
+        ]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return float(result.stdout.strip())
+
+    initial_audio_duration = get_precise_audio_duration(input_audio)
+    print(f"Initial audio duration: {initial_audio_duration:.3f} seconds")
+
     temp_audio_chunks_dir = f"jobs/{job_id}/output/temp_audio_chunks"
     os.makedirs(temp_audio_chunks_dir, exist_ok=True)
     os.makedirs(temp_audio_chunks_dir, exist_ok=True)
@@ -63,6 +78,15 @@ def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, 
         if chunk_path != input_audio:
             os.remove(chunk_path)
 
+    outro_gap_duration = 0.0
+    if full_result["segments"]:
+        last_segment_end = full_result["segments"][-1]["end"]
+        outro_gap_duration = max(0.0, initial_audio_duration - last_segment_end)
+        print(f"Last segment ends at: {last_segment_end:.3f}s")
+        print(f"Outro gap duration: {outro_gap_duration:.3f}s")
+
+    full_result["outro_gap_duration"] = outro_gap_duration
+
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(full_result, f, ensure_ascii=False, indent=2)
 
@@ -100,9 +124,9 @@ def transcribe(file_path, source_language=None, openai_api_key=None):
             response = client.audio.transcriptions.create(**api_params)
 
         if hasattr(response, "model_dump"):
-            return response.model_dump()
+            result = response.model_dump()
         elif hasattr(response, "to_dict"):
-            return response.to_dict()
+            result = response.to_dict()
         else:
             result = {
                 "text": getattr(response, "text", ""),
@@ -129,7 +153,10 @@ def transcribe(file_path, source_language=None, openai_api_key=None):
                 }
                 result["words"].append(word_dict)
 
-            return result
+        if not result.get("text") and not result.get("segments") and not result.get("words"):
+            raise ValueError(f"Empty transcription result for {file_path}")
+
+        return result
     except Exception as e:
         print(f"Error transcribing {file_path}: {str(e)}")
-        return {"text": "", "segments": [], "words": []}
+        raise ValueError(f"Failed to transcribe audio: {str(e)}")

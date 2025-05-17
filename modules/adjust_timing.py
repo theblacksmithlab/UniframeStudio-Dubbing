@@ -5,6 +5,8 @@ def adjust_segments_timing(file_path, output_file=None):
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
+    outro_gap_duration = data.get('outro_gap_duration')
+
     segments = data.get('segments', [])
 
     ADJUSTMENT_THRESHOLD = 0.5
@@ -28,6 +30,9 @@ def adjust_segments_timing(file_path, output_file=None):
 
     if output_file is None:
         output_file = file_path.replace('.json', '_adjusted.json')
+
+    if outro_gap_duration is not None:
+        data['outro_gap_duration'] = outro_gap_duration
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

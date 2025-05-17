@@ -42,6 +42,8 @@ def correct_transcript_segments(input_file, output_file=None):
     with open(input_file, 'r', encoding='utf-8') as f:
         transcript = json.load(f)
 
+    outro_gap_duration = transcript.get('outro_gap_duration')
+
     segments = transcript.get('segments', [])
     print(f"Loaded {len(segments)} transcription segments for processing.")
 
@@ -92,6 +94,9 @@ def correct_transcript_segments(input_file, output_file=None):
             full_text += " " + segment["text"].strip()
 
     transcript['text'] = full_text.strip()
+
+    if outro_gap_duration is not None:
+        transcript['outro_gap_duration'] = outro_gap_duration
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)

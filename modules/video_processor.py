@@ -6,7 +6,17 @@ import shutil
 
 
 class VideoProcessor:
-    def __init__(self, job_id, input_video_path, json_path, output_video_path, intro_outro_path, target_fps=25, is_premium=False):
+    def __init__(
+            self,
+            job_id,
+            input_video_path,
+            json_path,
+            output_video_path,
+            output_video_path_premium,
+            intro_outro_path,
+            target_fps=25,
+            is_premium=False
+    ):
         """
         Video Processor initialization
 
@@ -21,6 +31,7 @@ class VideoProcessor:
         self.input_video_path = input_video_path
         self.json_path = json_path
         self.output_video_path = output_video_path
+        self.output_video_path_premium = output_video_path_premium
         self.resources_dir = intro_outro_path
         self.target_fps = target_fps
         self.is_premium = is_premium
@@ -44,7 +55,7 @@ class VideoProcessor:
         self.needs_fps_conversion = abs(self.input_fps - target_fps) > 0.01
         self.converted_video_path = self.temp_dir / "converted_input.mp4"
 
-    def _run_command_old(self, cmd, **kwargs):
+    def _run_command(self, cmd, **kwargs):
         """Safely execute external command with minimal logging"""
         try:
             # Set capture_output=True by default if not specified
@@ -65,30 +76,6 @@ class VideoProcessor:
                 # Only print error output if it exists and is short
                 if hasattr(result, 'stderr') and result.stderr and len(result.stderr) < 200:
                     print(f"Error: {result.stderr.strip()}")
-                raise subprocess.CalledProcessError(result.returncode, cmd)
-
-            return result
-        except Exception as e:
-            print(f"Error: {str(e)}")
-            raise
-
-    def _run_command(self, cmd, **kwargs):
-        """Safely execute external command with full logging for debugging"""
-        try:
-            if 'capture_output' not in kwargs:
-                kwargs['capture_output'] = True
-
-            command_str = ' '.join(map(str, cmd))
-            print(f"Executing: {command_str[:100]}...")
-
-            result = subprocess.run(cmd, text=True, **kwargs)
-
-            if result.returncode != 0:
-                print(f"Command failed with code {result.returncode}")
-                if hasattr(result, 'stderr') and result.stderr:
-                    print(f"FULL ERROR OUTPUT:\n{result.stderr}")
-                if hasattr(result, 'stdout') and result.stdout:
-                    print(f"STDOUT:\n{result.stdout}")
                 raise subprocess.CalledProcessError(result.returncode, cmd)
 
             return result
@@ -702,6 +689,303 @@ class VideoProcessor:
     def combine_final_video_reliable(self):
         """Direct video combining using filter_complex for maximum quality"""
         segments = self.data.get('segments', [])
+
+        main_width, main_height = self._get_video_resolution(self.converted_video_path)
+        print(f"Main video resolution: {main_width}x{main_height}")
+
+        base_input_files = []
+
+        initial_gap_path = self.gaps_dir / "gap_start_0000.mp4"
+        if initial_gap_path.exists():
+            base_input_files.append((str(initial_gap_path), "gap_start_0000"))
+
+        for i in range(len(segments)):
+            segment_path = self.processed_segments_dir / f"processed_segment_{i:04d}.mp4"
+            if os.path.exists(segment_path):
+                base_input_files.append((str(segment_path), f"segment_{i:04d}"))
+            else:
+                print(f"Warning: Processed segment not found: {segment_path}")
+
+            gap_path = self.gaps_dir / f"gap_{i:04d}_{i + 1:04d}.mp4"
+            if gap_path.exists():
+                base_input_files.append((str(gap_path), f"gap_{i:04d}_{i + 1:04d}"))
+
+        final_gap_path = self.gaps_dir / f"gap_{len(segments) - 1:04d}_end.mp4"
+        if final_gap_path.exists():
+            base_input_files.append((str(final_gap_path), f"gap_{len(segments) - 1:04d}_end"))
+
+        selected_intro_path = None
+        if not self.is_premium:
+            print("Finding intro/outro for regular version...")
+            resources_dir = self.resources_dir
+
+            intro_4k_path = os.path.join(resources_dir, "intro_outro_4k.mp4")
+            intro_2k_path = os.path.join(resources_dir, "intro_outro_2k.mp4")
+            intro_fullhd_path = os.path.join(resources_dir, "intro_outro_full_hd.mp4")
+
+            selected_intro_path = intro_fullhd_path
+
+            if main_width is not None and main_height is not None:
+                if main_width >= 3840 or main_height >= 2160:
+                    if os.path.exists(intro_4k_path):
+                        selected_intro_path = intro_4k_path
+                        print(f"Using 4K intro/outro: {intro_4k_path}")
+                    else:
+                        print(f"4K intro not found, using fallback")
+                elif main_width >= 2560 or main_height >= 1440:
+                    if os.path.exists(intro_2k_path):
+                        selected_intro_path = intro_2k_path
+                        print(f"Using 2K intro/outro: {intro_2k_path}")
+                    else:
+                        print(f"2K intro not found, using fallback")
+
+            if not os.path.exists(selected_intro_path):
+                print(f"Warning: Selected intro file {selected_intro_path} not found!")
+                intro_files = [f for f in os.listdir(resources_dir) if f.startswith("intro_outro_")]
+                if intro_files:
+                    selected_intro_path = os.path.join(resources_dir, intro_files[0])
+                    print(f"Using alternative intro: {selected_intro_path}")
+                else:
+                    print("No intro files found in resources directory!")
+                    selected_intro_path = None
+
+            if selected_intro_path:
+                print(f"Selected intro/outro: {selected_intro_path}")
+
+        has_gpu = self._check_gpu_availability()
+
+        print(f"\n=== Creating Premium Version (no intro/outro) ===")
+        temp_output_premium = self.temp_dir / "temp_output_premium.mp4"
+
+        premium_input_files = base_input_files.copy()
+        print(f"Premium version files to merge: {len(premium_input_files)}")
+
+        filter_parts_premium = []
+        for i in range(len(premium_input_files)):
+            filter_parts_premium.append(f"[{i}:v]")
+
+        filter_graph_premium = f"{''.join(filter_parts_premium)}concat=n={len(premium_input_files)}:v=1:a=0[outv]"
+
+        ffmpeg_inputs_premium = []
+        for file_path, file_id in premium_input_files:
+            ffmpeg_inputs_premium.extend(['-i', file_path])
+
+        if has_gpu:
+            print("Using NVIDIA GPU for premium video...")
+            cmd_premium = [
+                'ffmpeg',
+                *ffmpeg_inputs_premium,
+                '-filter_complex', filter_graph_premium,
+                '-map', '[outv]',
+                '-c:v', 'h264_nvenc',
+                '-b:v', '200M',
+                '-bufsize', '200M',
+                '-rc', 'vbr',
+                '-rc-lookahead', '32',
+                '-spatial_aq', '1',
+                '-temporal_aq', '1',
+                '-aq-strength', '15',
+                '-qmin', '0',
+                '-qmax', '25',
+                '-profile:v', 'high',
+                '-level', '5.1',
+                '-preset', 'p7',
+                '-tune', 'hq',
+                '-pix_fmt', 'yuv444p',
+                '-movflags', '+faststart',
+                str(temp_output_premium)
+            ]
+        else:
+            print("Using CPU for premium video...")
+            cmd_premium = [
+                'ffmpeg',
+                *ffmpeg_inputs_premium,
+                '-filter_complex', filter_graph_premium,
+                '-map', '[outv]',
+                '-c:v', 'libx264',
+                '-crf', '0',
+                '-preset', 'veryslow',
+                '-tune', 'film',
+                '-pix_fmt', 'yuv444p',
+                '-movflags', '+faststart',
+                str(temp_output_premium)
+            ]
+
+        try:
+            self._run_command(cmd_premium)
+            if not os.path.exists(temp_output_premium) and has_gpu:
+                print("Error using GPU for premium. Trying CPU fallback...")
+                cpu_cmd_premium = [
+                    'ffmpeg',
+                    *ffmpeg_inputs_premium,
+                    '-filter_complex', filter_graph_premium,
+                    '-map', '[outv]',
+                    '-c:v', 'libx264',
+                    '-crf', '0',
+                    '-preset', 'veryslow',
+                    '-tune', 'film',
+                    '-pix_fmt', 'yuv444p',
+                    '-movflags', '+faststart',
+                    str(temp_output_premium)
+                ]
+                self._run_command(cpu_cmd_premium)
+        except Exception as e:
+            print(f"Error creating premium video: {e}")
+            if has_gpu:
+                print("Trying CPU fallback for premium...")
+                cpu_cmd_premium = [
+                    'ffmpeg',
+                    *ffmpeg_inputs_premium,
+                    '-filter_complex', filter_graph_premium,
+                    '-map', '[outv]',
+                    '-c:v', 'libx264',
+                    '-crf', '0',
+                    '-preset', 'veryslow',
+                    '-tune', 'film',
+                    '-pix_fmt', 'yuv444p',
+                    '-movflags', '+faststart',
+                    str(temp_output_premium)
+                ]
+                self._run_command(cpu_cmd_premium)
+
+        if os.path.exists(temp_output_premium):
+            premium_duration = self._get_video_duration(temp_output_premium)
+            print(f"Premium video created! Duration: {premium_duration:.4f} sec")
+            shutil.copy(temp_output_premium, self.output_video_path_premium)
+            print(f"Premium video saved to: {self.output_video_path_premium}")
+        else:
+            print("Error: Failed to create premium video!")
+            return False
+
+        if not self.is_premium and selected_intro_path:
+            print(f"\n=== Creating Regular Version (with intro/outro) ===")
+            temp_output_regular = self.temp_dir / "temp_output_regular.mp4"
+
+            regular_input_files = []
+            regular_input_files.append((str(selected_intro_path), "intro"))
+            regular_input_files.extend(base_input_files)
+            regular_input_files.append((str(selected_intro_path), "outro"))
+
+            print(f"Regular version files to merge: {len(regular_input_files)}")
+
+            filter_parts_regular = []
+            for i in range(len(regular_input_files)):
+                filter_parts_regular.append(f"[{i}:v]")
+
+            filter_graph_regular = f"{''.join(filter_parts_regular)}concat=n={len(regular_input_files)}:v=1:a=0[outv]"
+
+            ffmpeg_inputs_regular = []
+            for file_path, file_id in regular_input_files:
+                ffmpeg_inputs_regular.extend(['-i', file_path])
+
+            if has_gpu:
+                print("Using NVIDIA GPU for regular video...")
+                cmd_regular = [
+                    'ffmpeg',
+                    *ffmpeg_inputs_regular,
+                    '-filter_complex', filter_graph_regular,
+                    '-map', '[outv]',
+                    '-c:v', 'h264_nvenc',
+                    '-b:v', '200M',
+                    '-bufsize', '200M',
+                    '-rc', 'vbr',
+                    '-rc-lookahead', '32',
+                    '-spatial_aq', '1',
+                    '-temporal_aq', '1',
+                    '-aq-strength', '15',
+                    '-qmin', '0',
+                    '-qmax', '25',
+                    '-profile:v', 'high',
+                    '-level', '5.1',
+                    '-preset', 'p7',
+                    '-tune', 'hq',
+                    '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',
+                    str(temp_output_regular)
+                ]
+            else:
+                print("Using CPU for regular video...")
+                cmd_regular = [
+                    'ffmpeg',
+                    *ffmpeg_inputs_regular,
+                    '-filter_complex', filter_graph_regular,
+                    '-map', '[outv]',
+                    '-c:v', 'libx264',
+                    '-crf', '0',
+                    '-preset', 'veryslow',
+                    '-tune', 'film',
+                    '-pix_fmt', 'yuv444p',
+                    '-movflags', '+faststart',
+                    str(temp_output_regular)
+                ]
+
+            try:
+                self._run_command(cmd_regular)
+                if not os.path.exists(temp_output_regular) and has_gpu:
+                    print("Error using GPU for regular. Trying CPU fallback...")
+                    cpu_cmd_regular = [
+                        'ffmpeg',
+                        *ffmpeg_inputs_regular,
+                        '-filter_complex', filter_graph_regular,
+                        '-map', '[outv]',
+                        '-c:v', 'libx264',
+                        '-crf', '0',
+                        '-preset', 'veryslow',
+                        '-tune', 'film',
+                        '-pix_fmt', 'yuv444p',
+                        '-movflags', '+faststart',
+                        str(temp_output_regular)
+                    ]
+                    self._run_command(cpu_cmd_regular)
+            except Exception as e:
+                print(f"Error creating regular video: {e}")
+                if has_gpu:
+                    print("Trying CPU fallback for regular...")
+                    cpu_cmd_regular = [
+                        'ffmpeg',
+                        *ffmpeg_inputs_regular,
+                        '-filter_complex', filter_graph_regular,
+                        '-map', '[outv]',
+                        '-c:v', 'libx264',
+                        '-crf', '0',
+                        '-preset', 'veryslow',
+                        '-tune', 'film',
+                        '-pix_fmt', 'yuv444p',
+                        '-movflags', '+faststart',
+                        str(temp_output_regular)
+                    ]
+                    self._run_command(cpu_cmd_regular)
+
+            if os.path.exists(temp_output_regular):
+                regular_duration = self._get_video_duration(temp_output_regular)
+                print(f"Regular video created! Duration: {regular_duration:.4f} sec")
+                shutil.copy(temp_output_regular, self.output_video_path)
+                print(f"Regular video saved to: {self.output_video_path}")
+            else:
+                print("Error: Failed to create regular video!")
+                return False
+        else:
+            if self.is_premium:
+                print("Premium user - only premium version created")
+            else:
+                print("No intro/outro found - only premium version created")
+
+        premium_exists = os.path.exists(self.output_video_path_premium)
+        regular_exists = os.path.exists(self.output_video_path) if not self.is_premium else True
+
+        if premium_exists and regular_exists:
+            print(f"\n=== SUCCESS ===")
+            print(f"Premium video: {self.output_video_path_premium}")
+            if not self.is_premium:
+                print(f"Regular video: {self.output_video_path}")
+            return True
+        else:
+            print("Error: One or both videos failed to create!")
+            return False
+
+    def combine_final_video_reliable_workable(self):
+        """Direct video combining using filter_complex for maximum quality"""
+        segments = self.data.get('segments', [])
         temp_output = self.temp_dir / "temp_output.mp4"
 
         main_width, main_height = self._get_video_resolution(self.converted_video_path)
@@ -787,32 +1071,13 @@ class VideoProcessor:
 
         has_gpu = self._check_gpu_availability()
 
-        # Строим filter_complex для прямого склеивания
         filter_parts = []
         for i in range(len(input_files)):
             filter_parts.append(f"[{i}:v]")
 
         filter_graph = f"{''.join(filter_parts)}concat=n={len(input_files)}:v=1:a=0[outv]"
 
-        # Строим команду FFmpeg
         ffmpeg_inputs = []
-
-        #new
-        print("Checking all input files exist and are readable:")
-        for file_path, file_id in input_files:
-            if not os.path.exists(file_path):
-                print(f"ERROR: File not found: {file_path}")
-                return False
-
-            # Проверим, что файл читается ffprobe
-            try:
-                duration = self._get_video_duration(file_path)
-                print(f"  {file_id}: {duration:.3f}s - OK")
-            except Exception as e:
-                print(f"  {file_id}: ERROR - {e}")
-                return False
-
-        # old
         for file_path, file_id in input_files:
             ffmpeg_inputs.extend(['-i', file_path])
 
@@ -824,20 +1089,20 @@ class VideoProcessor:
                 '-filter_complex', filter_graph,
                 '-map', '[outv]',
                 '-c:v', 'h264_nvenc',
-                '-b:v', '200M',  # Увеличенный битрейт для максимального качества
+                '-b:v', '200M',
                 '-bufsize', '200M',
                 '-rc', 'vbr',
                 '-rc-lookahead', '32',
                 '-spatial_aq', '1',
                 '-temporal_aq', '1',
                 '-aq-strength', '15',
-                '-qmin', '0',  # Минимальный квантизатор
-                '-qmax', '25',  # Максимальный квантизатор
-                '-profile:v', 'high',  # High profile
-                '-level', '5.1',  # Высокий level
-                '-preset', 'p7',  # Максимальное качество
-                '-tune', 'hq',  # High quality tuning
-                '-pix_fmt', 'yuv444p',  # Без субсэмплинга для максимального качества
+                '-qmin', '0',
+                '-qmax', '25',
+                '-profile:v', 'high',
+                '-level', '5.1',
+                '-preset', 'p7',
+                '-tune', 'hq',
+                '-pix_fmt', 'yuv444p',
                 '-movflags', '+faststart',
                 str(temp_output)
             ]
@@ -926,7 +1191,7 @@ class VideoProcessor:
             print("Error: Failed to create final video!")
             return False
 
-    def combine_final_video_reliable_old_(self):
+    def combine_final_video_reliable_old(self):
         """A Robust Method for Combining Videos via Intermediate Images"""
         segments = self.data.get('segments', [])
         frames_dir = self.temp_dir / "frames"
@@ -1221,11 +1486,30 @@ class VideoProcessor:
             print("4. Combining final video using the reliable method...")
             is_success = self.combine_final_video_reliable()
 
-            if is_success and os.path.exists(self.output_video_path):
-                print(f"Done! Result saved to {self.output_video_path}")
-                self.cleanup()
+            if is_success:
+                if self.is_premium:
+                    if os.path.exists(self.output_video_path_premium):
+                        print(f"Done! Premium result saved to {self.output_video_path_premium}")
+                        self.cleanup()
+                    else:
+                        print(f"Warning: premium file was not found at {self.output_video_path_premium}")
+                        print("Temporary files will not be deleted for debugging purposes")
+                        is_success = False
+                else:
+                    if os.path.exists(self.output_video_path) and os.path.exists(self.output_video_path_premium):
+                        print(f"Done! Regular result saved to {self.output_video_path}")
+                        print(f"Done! Premium result saved to {self.output_video_path_premium}")
+                        self.cleanup()
+                    else:
+                        print(f"Warning: final files not found")
+                        if not os.path.exists(self.output_video_path):
+                            print(f"  Missing: {self.output_video_path}")
+                        if not os.path.exists(self.output_video_path_premium):
+                            print(f"  Missing: {self.output_video_path_premium}")
+                        print("Temporary files will not be deleted for debugging purposes")
+                        is_success = False
             else:
-                print(f"Warning: final file was not found at {self.output_video_path}")
+                print("Processing failed.")
                 print("Temporary files will not be deleted for debugging purposes")
 
             return is_success

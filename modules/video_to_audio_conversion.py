@@ -22,15 +22,12 @@ def extract_audio(input_video_path, extracted_audio_path=None):
     try:
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0:
-            print(f"Error during audio extraction: {result.stderr}")
-            return None
+            raise RuntimeError(f"FFmpeg error: {result.stderr}")
     except Exception as e:
-        print(f"Error executing ffmpeg command: {e}")
-        return None
+        raise RuntimeError(f"Error executing ffmpeg command: {e}")
 
     if not os.path.exists(extracted_audio_path):
-        print(f"Error: Audio file was not created at {extracted_audio_path}")
-        return None
+        raise FileNotFoundError(f"Audio file was not created at {extracted_audio_path}")
 
     file_size_mb = os.path.getsize(extracted_audio_path) / (1024 * 1024)
     print(f"Audio successfully extracted: {extracted_audio_path} (Size: {file_size_mb:.2f} MB)")

@@ -13,6 +13,8 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
 
     system_role = system_role_template.format(target_language=target_language)
 
+    print(f"TEMP DEBUG: {system_role}")
+
     if output_file is None:
         base_dir = os.path.dirname(input_file)
         base_name = os.path.splitext(os.path.basename(input_file))[0]
@@ -20,6 +22,8 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
 
     with open(input_file, 'r', encoding='utf-8') as f:
         transcript = json.load(f)
+
+    outro_gap_duration = transcript.get('outro_gap_duration')
 
     segments = transcript.get('segments', [])
     total_segments = len(segments)
@@ -63,13 +67,14 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
 
         except Exception as e:
             print(f"Error translating segment {i}: {e}")
-            error_message = f"[ERROR] Failed to translate: {str(e)[:100]}"
-            segment["translated_text"] = error_message
-            segment["initial_translation"] = error_message
+            raise ValueError(f"Failed to translate segment {i}: {str(e)}")
 
     translated_full_text = " ".join([s.get("translated_text", "") for s in segments])
     transcript["translated_text"] = translated_full_text
     transcript["target_language"] = target_language
+
+    if outro_gap_duration is not None:
+        transcript['outro_gap_duration'] = outro_gap_duration
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)

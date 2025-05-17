@@ -2,6 +2,7 @@
 import argparse
 import os
 import sys
+import traceback
 
 # import dotenv
 
@@ -135,6 +136,7 @@ def main():
     video_parser.add_argument("--input_video", required=True, help="Path to input video file")
     video_parser.add_argument("--json_file", required=True, help="Path to translated JSON with timing")
     video_parser.add_argument("--output_video", required=True, help="Path for output video")
+    video_parser.add_argument("--output_video_premium", required=True, help="Path for premium output video")
     video_parser.add_argument("--resources_dir", required=True, help="Path to resources directory")
     video_parser.add_argument("--is_premium", action="store_true",
                               help="Premium user (no intro/outro)")
@@ -149,24 +151,20 @@ def main():
     if args.command == "extract_audio":
         if not os.path.exists(args.input):
             print(f"Error: Video file {args.input} not found.")
-            return
+            sys.exit(1)
 
         try:
             result_file = extract_audio(args.input, args.output)
-            if result_file:
-                print(f"Extracting audio from video file completed successfully.")
-                print(f"The result was saved in file: {result_file}")
-            else:
-                print("Error: Audio extraction failed.")
-                return
+            print(f"Extracting audio from video file completed successfully.")
+            print(f"The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during video conversion: {e}")
-            return
+            sys.exit(1)
 
     elif args.command == "transcribe":
         if not os.path.exists(args.input):
             print(f"Error: Input file {args.input} not found.")
-            return
+            sys.exit(1)
 
         print(f"Transcribing the file: {args.input}")
         if args.source_language:
@@ -183,12 +181,12 @@ def main():
             print(f"Transcription completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during transcription: {e}")
-            return
+            sys.exit(1)
 
     elif args.command == "correct":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
-            return
+            sys.exit(1)
 
         print(f"Restructuring transcription segments: {args.input}")
         try:
@@ -196,12 +194,14 @@ def main():
             print(f"Restructuring completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during restructuring: {e}")
-            return
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
     elif args.command == "cleanup":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
-            return
+            sys.exit(1)
 
         print(f"Cleaning-up transcription segments: {args.input}")
         try:
@@ -209,12 +209,14 @@ def main():
             print(f"Transcription segments cleaned-up successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error cleaning-up: {e}")
-            return
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
     elif args.command == "optimize":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
-            return
+            sys.exit(1)
 
         print(f"Optimizing segments in transcription file: {args.input}")
         try:
@@ -224,12 +226,12 @@ def main():
             print(f"Error optimizing segments: {e}")
             import traceback
             traceback.print_exc()
-            return
+            sys.exit(1)
 
     elif args.command == "adjust_timing":
         if not os.path.exists(args.input):
             print(f"Error: Input JSON file {args.input} not found.")
-            return
+            sys.exit(1)
 
         print(f"Adjusting segment timing in file: {args.input}")
 
@@ -238,12 +240,14 @@ def main():
             print(f"Timing adjustment completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during timing adjustment: {e}")
-            return
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
     elif args.command == "translate":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
-            return
+            sys.exit(1)
 
         print(f"Translating transcription segments: {args.input}")
         print(f"Target language: {args.target_language}")
@@ -261,12 +265,13 @@ def main():
             print(f"Translation completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error translating segments: {e}")
-            return
+            sys.exit(1)
+
 
     elif args.command == "tts":
         if not os.path.exists(args.input):
             print(f"Error: Translated transcription file {args.input} not found.")
-            return
+            sys.exit(1)
 
         print(f"Voicing-over translated segments using {args.dealer}: {args.input}")
         print(f"Using voice: {args.voice}")
@@ -286,14 +291,14 @@ def main():
                 print(f"Voicing-over completed successfully. The result was saved in file: {result_file}")
             else:
                 print("Error: TTS generation failed.")
-                return
+                sys.exit(1)
 
 
         except Exception as e:
             print(f"Error voicing-over segments: {e}")
             import traceback
             traceback.print_exc()
-            return
+            sys.exit(1)
 
     # elif args.command == "segment-tts":
     #     if not os.path.exists(args.input):
@@ -389,6 +394,7 @@ def main():
                 input_video_path=args.input_video,
                 json_path=args.json_file,
                 output_video_path=args.output_video,
+                output_video_path_premium=args.output_video_premium,
                 intro_outro_path=args.resources_dir,
                 target_fps=25,
                 is_premium=args.is_premium

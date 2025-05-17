@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 from datetime import datetime
+from modules.job_status import update_job_status
 
 
 def run_command(command):
@@ -18,24 +19,67 @@ def run_command(command):
         return False
 
 
-def update_job_status_file(job_id, step, total_steps, description):
-    status_file = f"jobs/{job_id}/status.json"
+def add_intro_outro_audio(input_audio, output_audio, resources_dir):
+    intro_outro_path = os.path.join(resources_dir, "intro_outro_audio.mp3")
 
-    if os.path.exists(status_file):
-        with open(status_file, 'r') as f:
-            status = json.load(f)
-    else:
-        status = {}
+    if not os.path.exists(intro_outro_path):
+        print(f"Warning: Intro/outro audio not found: {intro_outro_path}")
+        return False
 
-    status.update({
-        "step": step,
-        "total_steps": total_steps,
-        "description": description,
-        "progress_percentage": round((step / total_steps) * 100)
-    })
+    cmd = [
+        'ffmpeg', '-y',
+        '-i', intro_outro_path,
+        '-i', input_audio,
+        '-i', intro_outro_path,
+        '-filter_complex', '[0:a][1:a][2:a]concat=n=3:v=0:a=1',
+        output_audio
+    ]
 
-    with open(status_file, 'w') as f:
-        json.dump(status, f, indent=2)
+    subprocess.run(cmd, capture_output=True, text=True)
+    return os.path.exists(output_audio)
+
+
+def create_stereo_version(input_file, output_file):
+    cmd = [
+        'ffmpeg', '-y',
+        '-i', input_file,
+        '-filter_complex', '[0]pan=stereo|c0=c0|c1=c0',
+        output_file
+    ]
+
+    subprocess.run(cmd, capture_output=True, text=True)
+    return os.path.exists(output_file)
+
+
+def combine_video_and_audio(video_path, audio_path, output_path):
+    """Combine video with audio preserving maximum quality"""
+    try:
+        cmd = [
+            'ffmpeg', '-y',
+            '-i', video_path,
+            '-i', audio_path,
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '320k',
+            '-map', '0:v:0',
+            '-map', '1:a:0',
+            '-shortest',
+            output_path
+        ]
+
+        print(f"Combining: {os.path.basename(video_path)} + {os.path.basename(audio_path)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode == 0:
+            print(f"Successfully combined: {os.path.basename(output_path)}")
+            return True
+        else:
+            print(f"FFmpeg error: {result.stderr}")
+            return False
+
+    except Exception as e:
+        print(f"Exception combining video and audio: {e}")
+        return False
 
 def process_job(job_id, source_language=None, target_language=None, tts_provider=None, tts_voice=None,
                 elevenlabs_api_key=None, openai_api_key=None, is_premium=False):
@@ -91,7 +135,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"TTS voice: {tts_voice}")
 
     # [Step 1]
-    update_job_status_file(job_id, 1, 10, "Extracting audio from video...")
+    update_job_status(job_id=job_id, step=3)
     print(f"\n{'=' * 25}")
     print(f"\n[Step 1] Extracting audio from video {video_path}...")
     audio_path = f"{audio_input_dir}/{base_name}.mp3"
@@ -117,7 +161,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 2]
-    update_job_status_file(job_id, 2, 10, "Transcribing extracted audio...")
+    update_job_status(job_id=job_id, step=4)
     print(f"\n{'=' * 25}")
     print(f"\n[Step 2] Transcribing audio {os.path.basename(audio_path)}...")
     transcription_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed.json")
@@ -150,7 +194,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 3]
-    update_job_status_file(job_id, 3, 10, "Structuring transcription...")
+    update_job_status(job_id=job_id, step=5)
     print(f"\n{'=' * 25}")
     print(f"\n[Step 3] Structuring transcription {os.path.basename(transcription_path)}...")
     corrected_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected.json")
@@ -176,7 +220,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 4]
-    update_job_status_file(job_id, 4, 10, "Cleaning transcription...")
+    update_job_status(job_id=job_id, step=6)
     print(f"\n{'=' * 25}")
     print(f"\n[Step 4] Cleaning transcription {os.path.basename(corrected_path)}...")
     cleaned_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned.json")
@@ -202,7 +246,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 5]
-    update_job_status_file(job_id, 5, 10, "Optimizing transcription...")
+    update_job_status(job_id=job_id, step=7)
     print(f"\n{'=' * 25}")
     print(f"\n[Step 5] Optimizing segments in transcription {os.path.basename(cleaned_path)}...")
     optimized_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned_optimized.json")
@@ -228,10 +272,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 6]
-    update_job_status_file(job_id, 6, 10, "Adjusting transcription segments timing...")
+    update_job_status(job_id=job_id, step=8)
     print(f"\n{'=' * 25}")
     print(f"\n[Step 6] Adjusting segments timing in transcription {os.path.basename(optimized_path)}...")
-    adjusted_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned_optimized_adjusted.json")
+    adjusted_path = os.path.join(
+        processing_jsons_dir,
+        f"{base_name}_transcribed_corrected_cleaned_optimized_adjusted.json"
+    )
     adjust_cmd = [sys.executable, "cli.py", "adjust_timing", "--input", optimized_path, "--output", adjusted_path]
 
     if not run_command(adjust_cmd):
@@ -254,10 +301,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 7]
-    update_job_status_file(job_id, 7, 10, "Translating transcription segments...")
+    update_job_status(job_id=job_id, step=9)
     print(f"\n{'=' * 25}")
     print(f"\n[Step 7] Translating transcription segments in {os.path.basename(adjusted_path)}...")
-    translated_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned_optimized_adjusted_translated.json")
+    translated_path = os.path.join(
+        processing_jsons_dir,
+        f"{base_name}_transcribed_corrected_cleaned_optimized_adjusted_translated.json"
+    )
     translate_cmd = [sys.executable, "cli.py", "translate", "--input", adjusted_path, "--output", translated_path]
 
     translate_cmd.extend(["--target_language", target_language])
@@ -285,7 +335,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"\n")
 
     # [Step 8]
-    update_job_status_file(job_id, 8, 10, "Generating TTS segments...")
+    update_job_status(job_id=job_id, step=10)
     print(f"\n{'=' * 25}")
     print(f"\n[Step 8] Generating audio using {tts_provider} with voice {tts_voice}...")
 
@@ -342,15 +392,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     if not os.path.exists(audio_segments_dir) or not any(f.endswith('.mp3') for f in os.listdir(audio_segments_dir)):
         print(f"Warning: Audio segments directory {audio_segments_dir} is empty or missing")
 
-    tts_audio_path = expected_audio_path
-
     print(f"TTS generation completed!")
     print(f"Audio segments saved to: {audio_segments_dir}")
     print(f"Final audio saved to: {expected_audio_path}")
     print(f"\n")
 
     # [Step 9]
-    update_job_status_file(job_id, 9, 10, "Segments translation automatic correction...")
+    update_job_status(job_id=job_id, step=11)
     print(f"\n{'=' * 25}")
     print(f"\n[Step 9] Auto-correcting segment durations...")
     auto_correct_cmd = [sys.executable, "cli.py", "auto-correct",
@@ -375,38 +423,60 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         }
 
     audio_result_dir = os.path.join(result_output_dir, "audio_result")
-    reassembled_audio_path = os.path.join(audio_result_dir, "new_audio_reassembled.mp3")
-    reassembled_stereo_path = os.path.join(audio_result_dir, "new_audio_reassembled_stereo.mp3")
-    original_stereo_path = os.path.join(audio_result_dir, "new_audio_stereo.mp3")
-
-    if os.path.exists(reassembled_audio_path):
-        print(f"Reassembled audio created: {reassembled_audio_path}")
-        final_audio_path = reassembled_audio_path
-        final_stereo_path = reassembled_stereo_path if os.path.exists(reassembled_stereo_path) else None
-    else:
-        print(f"No reassembled audio found, using original TTS audio: {tts_audio_path}")
-        final_audio_path = tts_audio_path
-        final_stereo_path = original_stereo_path if os.path.exists(original_stereo_path) else None
+    final_audio_path = os.path.join(audio_result_dir, "new_audio.mp3")
+    final_stereo_path = os.path.join(audio_result_dir, "new_audio_stereo.mp3")
 
     print(f"Auto-correction completed!")
     print(f"Final audio file: {final_audio_path}")
-    if final_stereo_path:
+    if os.path.exists(final_stereo_path):
         print(f"Final stereo file: {final_stereo_path}")
     print(f"\n")
 
     # [Step 10]
-    update_job_status_file(job_id, 10, 10, "Correcting source video duration...")
+    update_job_status(job_id=job_id, step=12)
     print(f"\n{'=' * 25}")
-    print(f"\n[Step 10] Processing video with new audio...")
+    print(f"\n[Step 10] Creating audio versions with intro/outro...")
+
+    audio_result_dir = os.path.join(result_output_dir, "audio_result")
+    final_audio_path = os.path.join(audio_result_dir, "new_audio.mp3")
+    final_stereo_path = os.path.join(audio_result_dir, "new_audio_stereo.mp3")
+
+    final_audio_with_ads = os.path.join(audio_result_dir, "new_audio_ads.mp3")
+    final_stereo_with_ads = os.path.join(audio_result_dir, "new_audio_stereo_ads.mp3")
+
+    if not is_premium:
+        print("Creating audio with intro/outro...")
+        add_intro_outro_audio(final_audio_path, final_audio_with_ads, "resources")
+
+        if os.path.exists(final_audio_with_ads):
+            create_stereo_version(final_audio_with_ads, final_stereo_with_ads)
+    else:
+        print("Premium user - skipping intro/outro for audio")
+
+    print(f"Audio processing completed!")
+    print(f"Clean audio: {final_audio_path}")
+    print(f"Clean stereo: {final_stereo_path}")
+    if not is_premium:
+        print(f"Audio with ads: {final_audio_with_ads}")
+        print(f"Stereo with ads: {final_stereo_with_ads}")
+    print("\n")
+
+    # [Step 11]
+    update_job_status(job_id=job_id, step=13)
+    print(f"\n{'=' * 25}")
+    print(f"\n[Step 11] Processing video with new audio...")
     video_result_dir = os.path.join(result_output_dir, "video_result")
     os.makedirs(video_result_dir, exist_ok=True)
-    final_video_path = os.path.join(video_result_dir, f"{base_name}_tts_based.mp4")
+
+    final_video_path_mute = os.path.join(video_result_dir, f"{base_name}_tts_based_mute.mp4")
+    final_video_path_mute_premium = os.path.join(video_result_dir, f"{base_name}_tts_based_mute_premium.mp4")
 
     process_video_cmd = [sys.executable, "cli.py", "process_video",
                          "--job_id", job_id,
                          "--input_video", video_path,
                          "--json_file", translated_path,
-                         "--output_video", final_video_path,
+                         "--output_video", final_video_path_mute,
+                         "--output_video_premium", final_video_path_mute_premium,
                          "--resources_dir", "resources"]
 
     if is_premium:
@@ -420,16 +490,77 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": "process_video"
         }
 
-    if not os.path.exists(final_video_path):
-        return {
-            "status": "error",
-            "message": f"Expected final video file {final_video_path} not created",
-            "job_id": job_id,
-            "step": "process_video"
-        }
+    if is_premium:
+        if not os.path.exists(final_video_path_mute_premium):
+            return {
+                "status": "error",
+                "message": f"Expected premium mute video file {final_video_path_mute_premium} not created",
+                "job_id": job_id,
+                "step": "process_video"
+            }
+    else:
+        if not os.path.exists(final_video_path_mute):
+            return {
+                "status": "error",
+                "message": f"Expected mute video file {final_video_path_mute} not created",
+                "job_id": job_id,
+                "step": "process_video"
+            }
+        if not os.path.exists(final_video_path_mute_premium):
+            return {
+                "status": "error",
+                "message": f"Expected premium mute video file {final_video_path_mute_premium} not created",
+                "job_id": job_id,
+                "step": "process_video"
+            }
 
     print(f"Video processing completed!")
-    print(f"Final video saved to: {final_video_path}")
+    print(f"Mute videos created successfully")
+    print(f"\n")
+
+
+    # [Step 12]
+    update_job_status(job_id=job_id, step=14)
+    print(f"\n{'=' * 25}")
+    print(f"\n[Step 12] Combining mute videos with stereo audio...")
+
+    final_video_path = os.path.join(video_result_dir, f"{base_name}_tts_based.mp4")
+    final_video_path_premium = os.path.join(video_result_dir, f"{base_name}_tts_based_premium.mp4")
+
+    if is_premium:
+        print("Premium user: combining premium mute video with clean stereo audio...")
+        if not combine_video_and_audio(final_video_path_mute_premium, final_stereo_path, final_video_path_premium):
+            return {
+                "status": "error",
+                "message": f"Failed to combine premium video with stereo audio",
+                "job_id": job_id,
+                "step": "combine_video_audio_premium"
+            }
+    else:
+        print("Regular user: combining mute video (with ads) + stereo audio (with ads)...")
+        if not combine_video_and_audio(final_video_path_mute, final_stereo_with_ads, final_video_path):
+            return {
+                "status": "error",
+                "message": f"Failed to combine video with stereo audio (with ads)",
+                "job_id": job_id,
+                "step": "combine_video_audio_with_ads"
+            }
+
+        print("  Regular user: combining premium mute video + clean stereo audio...")
+        if not combine_video_and_audio(final_video_path_mute_premium, final_stereo_path, final_video_path_premium):
+            return {
+                "status": "error",
+                "message": f"Failed to combine premium video with stereo audio",
+                "job_id": job_id,
+                "step": "combine_video_audio_premium"
+            }
+
+    print(f"Video-audio combination completed!")
+    if is_premium:
+        print(f"Premium video (with stereo): {final_video_path_premium}")
+    else:
+        print(f"Video with ads (with stereo): {final_video_path}")
+        print(f"Premium video (with stereo): {final_video_path_premium}")
     print(f"\n")
 
     result = {
@@ -452,10 +583,16 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "translated": translated_path,
             "final_audio": final_audio_path,
             "final_audio_stereo": final_stereo_path,
-            "final_video": final_video_path
+            "final_audio_with_ads": final_audio_with_ads,
+            "final_audio_stereo_with_ads": final_stereo_with_ads,
+            "final_video": final_video_path,
+            "final_video_premium": final_video_path_premium,
+            "final_video_mute": final_video_path_mute,
+            "final_video_mute_premium": final_video_path_mute_premium
         },
-        "steps_completed": ["extract", "transcribe", "correct", "cleanup", "optimize",
-                            "adjust", "translate", "tts", "auto-correct", "process_video"]
+        "steps_completed": ["extract", "transcribe", "correct", "cleanup", "optimize", "adjust", "translate",
+                            "tts", "auto-correct", "final_audio_files_creation", "process_video",
+                            "combine_video_audio"]
     }
 
     # [Cleanup]
@@ -468,20 +605,32 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     files_to_move = [
         (os.path.join(f"jobs/{job_id}", "job_params.json"),
          os.path.join(job_result_dir, "job_params.json")),
-
         (translated_path,
          os.path.join(job_result_dir, os.path.basename(translated_path))),
 
         (final_audio_path,
          os.path.join(job_result_dir, os.path.basename(final_audio_path))),
+        (final_stereo_path,
+         os.path.join(job_result_dir, os.path.basename(final_stereo_path))),
 
-        (final_video_path,
-         os.path.join(job_result_dir, os.path.basename(final_video_path)))
+        (final_video_path_premium,
+         os.path.join(job_result_dir, os.path.basename(final_video_path_premium))),
+        (final_video_path_mute_premium,
+         os.path.join(job_result_dir, os.path.basename(final_video_path_mute_premium)))
     ]
 
-    if final_stereo_path and os.path.exists(final_stereo_path):
-        files_to_move.append((final_stereo_path,
-                              os.path.join(job_result_dir, os.path.basename(final_stereo_path))))
+    if not is_premium:
+        files_to_move.extend([
+            (final_video_path,
+             os.path.join(job_result_dir, os.path.basename(final_video_path))),
+            (final_video_path_mute,
+             os.path.join(job_result_dir, os.path.basename(final_video_path_mute))),
+
+            (final_audio_with_ads,
+             os.path.join(job_result_dir, os.path.basename(final_audio_with_ads))),
+            (final_stereo_with_ads,
+             os.path.join(job_result_dir, os.path.basename(final_stereo_with_ads)))
+        ])
 
     moved_files = []
     for src, dst in files_to_move:
@@ -493,10 +642,22 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             print(f"Warning: File not found: {src}")
 
     result["output_files"]["final_audio"] = os.path.join(job_result_dir, os.path.basename(final_audio_path))
-    result["output_files"]["final_video"] = os.path.join(job_result_dir, os.path.basename(final_video_path))
+    result["output_files"]["final_audio_stereo"] = os.path.join(job_result_dir, os.path.basename(final_stereo_path))
     result["output_files"]["translated"] = os.path.join(job_result_dir, os.path.basename(translated_path))
-    if final_stereo_path:
-        result["output_files"]["final_audio_stereo"] = os.path.join(job_result_dir, os.path.basename(final_stereo_path))
+    result["output_files"]["final_video_premium"] = os.path.join(job_result_dir,
+                                                                 os.path.basename(final_video_path_premium))
+    result["output_files"]["final_video_mute_premium"] = os.path.join(job_result_dir,
+                                                                      os.path.basename(final_video_path_mute_premium))
+
+    if not is_premium:
+        result["output_files"]["final_video"] = os.path.join(job_result_dir, os.path.basename(final_video_path))
+        result["output_files"]["final_video_mute"] = os.path.join(job_result_dir,
+                                                                  os.path.basename(final_video_path_mute))
+        result["output_files"]["final_audio_with_ads"] = os.path.join(job_result_dir,
+                                                                      os.path.basename(final_audio_with_ads))
+        result["output_files"]["final_audio_stereo_with_ads"] = os.path.join(job_result_dir,
+                                                                             os.path.basename(final_stereo_with_ads))
+
 
     with open(os.path.join(job_result_dir, "pipeline_result.json"), "w") as f:
         json.dump(result, f, indent=2)
@@ -507,8 +668,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         os.path.join(job_base_dir, "audio_input"),
         os.path.join(job_base_dir, "timestamped_transcriptions"),
         os.path.join(job_base_dir, "output"),
-        os.path.join(job_base_dir, "job_params.json"),
-        os.path.join(job_base_dir, "status.json")
+        os.path.join(job_base_dir, "job_params.json")
     ]
 
     for path in cleanup_paths:
@@ -529,7 +689,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     print(f"COMPLETE VIDEO PROCESSING FINISHED SUCCESSFULLY!")
     print(f"Job ID: {job_id}")
     print(f"Original video: {video_path}")
-    print(f"Final video: {final_video_path}")
+    print(f"Final video: {final_video_path_mute}")
     print(f"Total steps completed: {len(result['steps_completed'])}")
     print("=================================================================\n")
 
@@ -541,12 +701,12 @@ def main():
     parser.add_argument("--job_id", required=True, help="Unique job identifier")
     parser.add_argument("--source_language", help="Source language of the video (optional)")
     parser.add_argument("--target_language", required=True, help="Target language for translation")
-    parser.add_argument("--tts_provider", choices=["openai", "elevenlabs"], required=True, help="TTS service provider")
+    parser.add_argument("--tts_provider", choices=["openai", "elevenlabs"],
+                        required=True, help="TTS service provider")
     parser.add_argument("--tts_voice", required=True, help="Voice identifier for TTS")
     parser.add_argument("--elevenlabs_api_key", help="ElevenLabs API key (optional)")
     parser.add_argument("--openai_api_key", help="OpenAI API key (optional)")
-    parser.add_argument("--is_premium", action="store_true",
-                        help="User's subscription status")
+    parser.add_argument("--is_premium", action="store_true", help="User's subscription status")
 
     args = parser.parse_args()
 
