@@ -13,8 +13,6 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
 
     system_role = system_role_template.format(target_language=target_language)
 
-    print(f"TEMP DEBUG: {system_role}")
-
     if output_file is None:
         base_dir = os.path.dirname(input_file)
         base_name = os.path.splitext(os.path.basename(input_file))[0]

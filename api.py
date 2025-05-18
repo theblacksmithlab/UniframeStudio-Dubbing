@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from utils.logger_config import setup_logger
 
 
-logger = setup_logger(name=__name__, log_file='logs/app.log')
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 app = FastAPI(title="Uniframe Studio Video Processing API", version="1.0.0")
 
@@ -61,7 +61,7 @@ async def get_job_status(job_id: str):
             total_steps=status_data.get("total_steps"),
             description=status_data.get("description"),
             progress_percentage=status_data.get("progress_percentage"),
-            error_message=status_data.get("error_message")
+            error_message=status_data.get("error_message"),
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -79,7 +79,7 @@ async def get_job_result(job_id: str):
             job_id=job_id,
             status=status_data["status"],
             result_urls=status_data.get("result_urls"),
-            error_message=status_data.get("error_message")
+            error_message=status_data.get("error_message"),
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -99,7 +99,10 @@ async def start_video_processing(request: ProcessVideoRequest):
     if not request.tts_provider:
         raise HTTPException(status_code=400, detail="TTS provider is required")
     elif request.tts_provider not in ["openai", "elevenlabs"]:
-        raise HTTPException(status_code=400, detail="TTS provider must be either 'openai' or 'elevenlabs'")
+        raise HTTPException(
+            status_code=400,
+            detail="TTS provider must be either 'openai' or 'elevenlabs'",
+        )
 
     if not request.tts_voice:
         raise HTTPException(status_code=400, detail="TTS voice is required")
@@ -108,11 +111,17 @@ async def start_video_processing(request: ProcessVideoRequest):
         raise HTTPException(status_code=400, detail="API-keys is required")
 
     if "openai" not in request.api_keys or not request.api_keys.get("openai"):
-        raise HTTPException(status_code=400, detail="OpenAI API key is required for all operations")
+        raise HTTPException(
+            status_code=400, detail="OpenAI API key is required for all operations"
+        )
 
     if request.tts_provider == "elevenlabs" and (
-            "elevenlabs" not in request.api_keys or not request.api_keys.get("elevenlabs")):
-        raise HTTPException(status_code=400, detail="ElevenLabs API key is required for ElevenLabs TTS provider")
+        "elevenlabs" not in request.api_keys or not request.api_keys.get("elevenlabs")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="ElevenLabs API key is required for ElevenLabs TTS provider",
+        )
 
     os.makedirs("jobs", exist_ok=True)
     os.makedirs(f"jobs/{request.job_id}", exist_ok=True)
@@ -120,18 +129,13 @@ async def start_video_processing(request: ProcessVideoRequest):
     job_status = get_or_create_job_status(request.job_id)
 
     job_params_path = f"jobs/{request.job_id}/job_params.json"
-    with open(job_params_path, 'w') as f:
+    with open(job_params_path, "w") as f:
         json.dump(request.model_dump(), f)
 
-    with open(f"jobs/{request.job_id}/pending", 'w') as f:
+    with open(f"jobs/{request.job_id}/pending", "w") as f:
         f.write(datetime.now().isoformat())
 
-    subprocess.Popen([
-        sys.executable,
-        "worker.py",
-        "--job_id",
-        request.job_id
-    ])
+    subprocess.Popen([sys.executable, "worker.py", "--job_id", request.job_id])
 
     return JobStatus(
         job_id=request.job_id,
@@ -142,8 +146,9 @@ async def start_video_processing(request: ProcessVideoRequest):
         total_steps=job_status["total_steps"],
         description=job_status["description"],
         progress_percentage=job_status["progress_percentage"],
-        error_message=job_status.get("error_message")
+        error_message=job_status.get("error_message"),
     )
+
 
 # async def process_video_job(request: ProcessVideoRequest):
 #     job_id = request.job_id
