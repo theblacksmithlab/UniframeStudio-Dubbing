@@ -2,7 +2,6 @@
 import argparse
 import os
 import sys
-import traceback
 
 # import dotenv
 
@@ -84,7 +83,7 @@ def main():
     tts_parser.add_argument("--voice", "-v", required=True,
                             help="Voice for dubbing")
     tts_parser.add_argument("--elevenlabs_api_key", help="ElevenLabs API key (required for ElevenLabs)")
-    tts_parser.add_argument("--openai_api_key", help="OpenAI API key (required for OpenAI)")
+    tts_parser.add_argument("--openai_api_key", required=True, help="OpenAI API key")
     tts_parser.add_argument("--job_id", required=True, help="Job identifier")
 
     # # Sub-parser for regenerating a single segment
@@ -115,7 +114,8 @@ def main():
     text_correction_parser.add_argument("--voice", "-v", required=True,
                                         help="Voice for dubbing")
     text_correction_parser.add_argument("--elevenlabs_api_key", help="ElevenLabs API key (optional)")
-    text_correction_parser.add_argument("--openai_api_key", help="OpenAI API key (required for text correction)")
+    text_correction_parser.add_argument("--openai_api_key", required=True,
+                                        help="OpenAI API key (required for text correction)")
     text_correction_parser.add_argument("--job_id", required=True, help="Job identifier")
 
     # # Add a new sub-parser for reassembling audio from existing segments
@@ -145,9 +145,8 @@ def main():
 
     if not args.command:
         parser.print_help()
-        return
+        sys.exit(1)
 
-    # Processing the commands
     if args.command == "extract_audio":
         if not os.path.exists(args.input):
             print(f"Error: Video file {args.input} not found.")
@@ -273,6 +272,10 @@ def main():
             print(f"Error: Translated transcription file {args.input} not found.")
             sys.exit(1)
 
+        if args.dealer == "elevenlabs" and not args.elevenlabs_api_key:
+            print("Error: ElevenLabs API key is required for ElevenLabs TTS.")
+            sys.exit(1)
+
         print(f"Voicing-over translated segments using {args.dealer}: {args.input}")
         print(f"Using voice: {args.voice}")
 
@@ -283,8 +286,8 @@ def main():
                 args.output,
                 args.voice,
                 args.dealer,
-                elevenlabs_api_key=args.elevenlabs_api_key if hasattr(args, 'elevenlabs_api_key') else None,
-                openai_api_key=args.openai_api_key if hasattr(args, 'openai_api_key') else None
+                elevenlabs_api_key=args.elevenlabs_api_key,
+                openai_api_key=args.openai_api_key
             )
 
             if result_file:
@@ -292,7 +295,6 @@ def main():
             else:
                 print("Error: TTS generation failed.")
                 sys.exit(1)
-
 
         except Exception as e:
             print(f"Error voicing-over segments: {e}")
@@ -321,19 +323,15 @@ def main():
     elif args.command == "auto-correct":
         if not os.path.exists(args.input):
             print(f"Error: Transcription file {args.input} not found.")
-            return
+            sys.exit(1)
 
         if args.dealer == "elevenlabs" and not args.elevenlabs_api_key:
-            print(f"Error: ElevenLabs API key is required for ElevenLabs TTS")
-            return
-
-        if args.dealer == "openai" and not args.openai_api_key:
-            print(f"Error: OpenAI API key is required for OpenAI TTS")
-            return
+            print("Error: ElevenLabs API key is required for ElevenLabs TTS.")
+            sys.exit(1)
 
         if not args.openai_api_key:
-            print(f"Error: OpenAI API key is required for text correction")
-            return
+            print(f"Error: OpenAI API key is required for all operations")
+            sys.exit(1)
 
         print(f"Automatically correcting segment durations: {args.input}")
         print(f"Using TTS provider: {args.dealer} with voice: {args.voice}")
@@ -349,12 +347,17 @@ def main():
                 elevenlabs_api_key=args.elevenlabs_api_key,
                 openai_api_key=args.openai_api_key
             )
+
+            if not result_file:
+                print("Error: Segment correction failed.")
+                sys.exit(1)
+
             print(f"Automatic text correction completed successfully. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error during automatic text correction: {e}")
             import traceback
             traceback.print_exc()
-            return
+            sys.exit(1)
 
         print(f"Reassembling audio from segments using file: {args.input}")
         try:
@@ -363,13 +366,17 @@ def main():
                 args.job_id,
                 args.output
             )
-            if result_file:
-                print(f"Audio successfully reassembled. The result was saved in file: {result_file}")
+
+            if not result_file:
+                print("Error: Audio reassembly failed.")
+                sys.exit(1)
+
+            print(f"Audio successfully reassembled. The result was saved in file: {result_file}")
         except Exception as e:
             print(f"Error reassembling audio: {e}")
             import traceback
             traceback.print_exc()
-            return
+            sys.exit(1)
 
     elif args.command == "process_video":
         print("Initializing Video Processor...")
@@ -377,15 +384,15 @@ def main():
         try:
             if not os.path.exists(args.input_video):
                 print(f"Error: Input video not found: {args.input_video}")
-                return
+                sys.exit(1)
 
             if not os.path.exists(args.json_file):
                 print(f"Error: JSON file not found: {args.json_file}")
-                return
+                sys.exit(1)
 
             if not os.path.exists(args.resources_dir):
                 print(f"Error: Resources directory not found: {args.resources_dir}")
-                return
+                sys.exit(1)
 
             os.makedirs(os.path.dirname(args.output_video), exist_ok=True)
 
@@ -410,7 +417,7 @@ def main():
             print(f"Error during video processing: {e}")
             import traceback
             traceback.print_exc()
-            return
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()

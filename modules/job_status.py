@@ -1,12 +1,11 @@
 import os
 import json
 import fcntl
-import shutil
 from typing import Dict, Any, Optional
 from datetime import datetime
 import logging
 
-# Configure logging
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -35,29 +34,35 @@ JOB_STATUS_PROCESSING = "processing"
 JOB_STATUS_COMPLETED = "completed"
 JOB_STATUS_FAILED = "failed"
 
+
 def get_or_create_job_status(job_id: str) -> Dict[str, Any]:
-    """Get job status from file or create new one"""
     status_file = f"jobs/{job_id}/status.json"
 
     if os.path.exists(status_file):
-        with open(status_file, 'r') as f:
-            return json.load(f)
-    else:
-        os.makedirs(f"jobs/{job_id}", exist_ok=True)
-        status = {
-            "status": JOB_STATUS_PROCESSING,
-            "created_at": datetime.now().isoformat(),
-            "completed_at": None,
-            "step": 1,
-            "total_steps": JOB_TOTAL_STEPS,
-            "description": STEP_DESCRIPTIONS[1],
-            "progress_percentage": round((1 / JOB_TOTAL_STEPS) * 100),
-            "error_message": None,
-            "result_urls": None
-        }
-        with open(status_file, 'w') as f:
-            json.dump(status, f, indent=2)
-        return status
+        try:
+            with open(status_file, 'r') as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON in status file: {status_file}")
+
+    status = {
+        "status": JOB_STATUS_PROCESSING,
+        "created_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "step": 1,
+        "total_steps": JOB_TOTAL_STEPS,
+        "description": STEP_DESCRIPTIONS[1],
+        "progress_percentage": round((1 / JOB_TOTAL_STEPS) * 100),
+        "error_message": None,
+        "result_urls": None
+    }
+
+    os.makedirs(os.path.dirname(status_file), exist_ok=True)
+
+    with open(status_file, 'w') as f:
+        json.dump(status, f, indent=2)
+
+    return status
 
 
 def update_job_status(job_id: str,
@@ -131,16 +136,16 @@ def update_job_status(job_id: str,
         return False
 
 
-async def finalize_job(job_id: str):
+def finalize_job(job_id: str):
     try:
-        status_file = f"jobs/{job_id}/status.json"
-        job_result_dir = f"jobs/{job_id}/job_result"
-
-        if os.path.exists(status_file) and os.path.exists(job_result_dir):
-            shutil.copy(status_file, os.path.join(job_result_dir, "status.json"))
-
-            os.remove(status_file)
-
-            logger.info(f"Status file moved to job_result for job {job_id}")
+        update_job_status(
+            job_id=job_id,
+            status=JOB_STATUS_COMPLETED,
+            completed_at=datetime.now().isoformat(),
+            progress_percentage=100
+        )
+        logger.info(f"Job {job_id} finalized successfully")
+        return True
     except Exception as e:
-        logger.error(f"Error moving status file: {e}")
+        logger.error(f"Error during job finalization: {e}")
+        return False

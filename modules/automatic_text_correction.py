@@ -48,15 +48,27 @@ def correct_text_through_api(
         )
 
         corrected_text = response.choices[0].message.content.strip()
+
+        if not corrected_text:
+            print("Warning: API returned empty text, using original")
+            return current_text
+
         return corrected_text
 
+
     except Exception as e:
-        print(f"Error correcting text: {e}")
-        return current_text
+        print(f"Error with OpenAI API: {e}")
+        raise ValueError(f"OpenAI API error: {str(e)}")
 
 
 def correct_segment_durations(translation_file, job_id, max_attempts=5, threshold=0.2, voice="onyx", dealer="openai",
                               elevenlabs_api_key=None, openai_api_key=None):
+    if not openai_api_key:
+        raise ValueError("OpenAI API key is required for text correction but not provided")
+
+    if dealer.lower() == "elevenlabs" and not elevenlabs_api_key:
+        raise ValueError("ElevenLabs API key is required for ElevenLabs TTS but not provided")
+
     base_dir = f"jobs/{job_id}/output"
     segments_dir = os.path.join(base_dir, "audio_segments")
 
@@ -116,42 +128,62 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
             if segment_index < len(segments) - 1:
                 next_text = segments[segment_index + 1].get("translated_text", "").strip()
 
-            corrected_text = correct_text_through_api(
-                segment["translated_text"],
-                segment["original_duration"],
-                segment["tts_duration"],
-                mode,
-                previous_text,
-                next_text,
-                openai_api_key=openai_api_key
-            )
+            try:
+                corrected_text = correct_text_through_api(
+                    segment["translated_text"],
+                    segment["original_duration"],
+                    segment["tts_duration"],
+                    mode,
+                    previous_text,
+                    next_text,
+                    openai_api_key=openai_api_key
+                )
 
-            data["segments"][segment_index]["translated_text"] = corrected_text
+                data["segments"][segment_index]["translated_text"] = corrected_text
 
-            with open(translation_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                try:
+                    with open(translation_file, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                except IOError as e:
+                    print(f"Error saving corrected text: {e}")
+                    continue
 
-            segment_audio_file = os.path.join(segments_dir, f"segment_{segment_id}.mp3")
+                segment_audio_file = os.path.join(segments_dir, f"segment_{segment_id}.mp3")
 
-            print(f"Regenerating audio for segment {segment_id}...")
-            regenerate_segment(
-                translation_file,
-                job_id,
-                segment_id,
-                output_audio_file=segment_audio_file,
-                voice=voice,
-                dealer=dealer,
-                elevenlabs_api_key=elevenlabs_api_key,
-                openai_api_key=openai_api_key,
-            )
+                print(f"Regenerating audio for segment {segment_id}...")
+                result = regenerate_segment(
+                    translation_file,
+                    job_id,
+                    segment_id,
+                    output_audio_file=segment_audio_file,
+                    voice=voice,
+                    dealer=dealer,
+                    elevenlabs_api_key=elevenlabs_api_key,
+                    openai_api_key=openai_api_key,
+                )
 
-            with open(translation_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                if not result:
+                    print(f"Failed to regenerate segment {segment_id}")
+                    continue
 
-            segments = data.get("segments", [])
+                try:
+                    with open(translation_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except (json.JSONDecodeError, FileNotFoundError, IOError) as e:
+                    print(f"Error reading updated translation file: {e}")
+                    continue
 
-    with open(translation_file, "r", encoding="utf-8") as f:
-        final_data = json.load(f)
+                segments = data.get("segments", [])
+
+            except Exception as e:
+                print(f"Error processing segment {segment_id}: {e}")
+                continue
+
+    try:
+        with open(translation_file, "r", encoding="utf-8") as f:
+            final_data = json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError, IOError) as e:
+        raise ValueError(f"Error reading final translation file: {str(e)}")
 
     segments = final_data.get("segments", [])
     remaining_issues = []

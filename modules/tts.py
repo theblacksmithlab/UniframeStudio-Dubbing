@@ -176,15 +176,42 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
             print(f"Error processing segment {i}: {e}")
             import traceback
             traceback.print_exc()
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
             continue
 
-    print("Assembling final audio file...")
-    assemble_audio_file(generated_segments, output_audio_file, data)
+    if not generated_segments:
+        print("Error: No segments were successfully processed.")
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        return None
 
-    shutil.rmtree(temp_dir)
+    try:
+        print("Assembling final audio file...")
+        assemble_audio_file(generated_segments, output_audio_file, data)
+    except Exception as e:
+        print(f"Error assembling final audio file: {e}")
+        import traceback
+        traceback.print_exc()
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        return None
 
-    with open(translation_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    try:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+    except Exception as e:
+        print(f"Warning: Failed to clean up temporary directory: {e}")
+
+    try:
+        with open(translation_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving updated data to file: {e}")
+        return None
 
     print(f"\nTTS generation completed successfully!")
     print(f"Individual segments saved in: {segments_dir}")
@@ -318,6 +345,8 @@ def reassemble_audio_file(translation_file, job_id, output_audio_file=None):
 def make_api_request_with_retry(url, data, headers, max_retries=10, retry_delay=2):
     retries = 0
     last_exception = None
+    last_status_code = None
+    last_response_text = None
 
     while retries < max_retries:
         try:
@@ -326,6 +355,11 @@ def make_api_request_with_retry(url, data, headers, max_retries=10, retry_delay=
                 return response
             else:
                 print(f"API error (attempt {retries + 1}/{max_retries}): {response.status_code} - {response.text}")
+                last_status_code = response.status_code
+                last_response_text = response.text
+
+                if response.status_code in [400, 401, 403]:  # Bad request, Unauthorized, Forbidden
+                    raise ValueError(f"API returned error {response.status_code}: {response.text}")
         except (requests.RequestException, TimeoutError, ConnectionError, ssl.SSLError) as e:
             last_exception = e
             print(f"Request failed (attempt {retries + 1}/{max_retries}): {e}")
@@ -336,4 +370,7 @@ def make_api_request_with_retry(url, data, headers, max_retries=10, retry_delay=
             print(f"Retrying in {sleep_time} seconds...")
             time.sleep(sleep_time)
 
-    raise Exception(f"Failed after {max_retries} attempts. Last error: {last_exception}")
+    if last_status_code:
+        raise ValueError(f"API request failed with status code {last_status_code}: {last_response_text}")
+    else:
+        raise Exception(f"Failed after {max_retries} attempts. Last error: {last_exception}")
