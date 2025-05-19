@@ -2,6 +2,10 @@ import os
 import json
 import openai
 from utils.ai_utils import load_system_role_for_timestamped_translation
+from utils.logger_config import setup_logger
+
+
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def translate_transcribed_segments(input_file, output_file=None, target_language=None,
@@ -26,9 +30,9 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
     segments = transcript.get('segments', [])
     total_segments = len(segments)
 
-    print(f"Starting translation of {total_segments} segments...")
-    print(f"Target language: {target_language}")
-    print(f"Using model: {model}")
+    logger.info(f"Starting translation of {total_segments} segments...")
+    logger.info(f"Target language: {target_language}")
+    logger.info(f"Using model: {model}")
 
     client = openai.OpenAI(api_key=openai_api_key)
 
@@ -44,7 +48,7 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
             f"Next segment text: {next_text} (provided for context only)"
         )
 
-        print(f"Translating segment {i + 1}/{total_segments}: {current_text[:50]}...")
+        logger.info(f"Translating segment {i + 1}/{total_segments}: {current_text[:50]}...")
 
         try:
             response = client.chat.completions.create(
@@ -61,10 +65,10 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
             segment["translated_text"] = translated_text
             segment["initial_translation"] = translated_text
 
-            print(f"-> Translated: {translated_text[:50]}...")
+            logger.info(f"-> Translated: {translated_text[:50]}...")
 
         except Exception as e:
-            print(f"Error translating segment {i}: {e}")
+            logger.error(f"Error translating segment {i}: {e}")
             raise ValueError(f"Failed to translate segment {i}: {str(e)}")
 
     translated_full_text = " ".join([s.get("translated_text", "") for s in segments])
@@ -77,6 +81,6 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)
 
-    print(f"Translation complete! Result saved to: {output_file}")
+    logger.info(f"Translation complete! Result saved to: {output_file}")
 
     return output_file

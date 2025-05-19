@@ -3,20 +3,15 @@
 # Extract audio from video file:
 
 ```bash
-python cli.py extract_audio --input video_input/input.mp4
+python cli.py extract_audio --input input/example.mp4
 ```
-
-or
-## Extract audio from all videos in the directory:
-
-python cli.py extract_audio --input video_input
 
 =================================================================
 
 # Timestamped transcription:
 
 ```bash
-python cli.py transcribe --input audio_input/input.mp3
+python cli.py transcribe --input input/example.mp3
 ```
 
 =================================================================
@@ -24,27 +19,15 @@ python cli.py transcribe --input audio_input/input.mp3
 # Timestamped transcription correction:
 
 ```bash
-python cli.py correct --input output/timestamped_transcriptions/input_transcribed.json
+python cli.py correct --input output/timestamped_transcriptions/example_transcribed.json
 ```
-
-=================================================================
-
-# Transcription segments correction:
-
-```bash
-python cli.py correct --input output/timestamped_transcriptions/input_transcribed.json --start_timestamp 4.0
-```
-
-## Args 
---start_timestamp 4.0 -> Set specific start timestamp for the first segment (e.g. 0.0 or 4.0), for example for adding
-known length intro later (optional)
 
 =================================================================
 
 # Corrected timestamped transcription cleaning up:
 
 ```bash
-python cli.py cleanup --input output/timestamped_transcriptions/input_transcribed_corrected.json
+python cli.py cleanup --input output/timestamped_transcriptions/example_transcribed_corrected.json
 ```
 
 =================================================================

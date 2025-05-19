@@ -1,5 +1,9 @@
 import os
 import json
+from utils.logger_config import setup_logger
+
+
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def merge_segments(segments, current_idx, next_idx):
@@ -45,7 +49,7 @@ def correct_transcript_segments(input_file, output_file=None):
     outro_gap_duration = transcript.get('outro_gap_duration')
 
     segments = transcript.get('segments', [])
-    print(f"Loaded {len(segments)} transcription segments for processing.")
+    logger.info(f"Loaded {len(segments)} transcription segments for processing.")
 
     max_merges = len(segments)
 
@@ -67,7 +71,7 @@ def correct_transcript_segments(input_file, output_file=None):
                 next_idx += 1
 
             if next_idx < len(corrected_segments):
-                print(
+                logger.info(
                     f"Merging segment {i} (ID: {corrected_segments[i]['id']}) with segment {next_idx} (ID: {corrected_segments[next_idx]['id']})"
                 )
 
@@ -77,11 +81,11 @@ def correct_transcript_segments(input_file, output_file=None):
                     merge_count += 1
 
                 if merge_count >= max_merges:
-                    print("WARNING! Merging limit reached, stopping the process.")
+                    logger.warning("WARNING! Merging limit reached, stopping the process.")
                     i += 1
             else:
                 corrected_segments[i]["text"] = corrected_segments[i]["text"].strip() + "."
-                print(f"Added a period to segment {i}")
+                logger.info(f"Added a period to segment {i}")
                 i += 1
         else:
             i += 1
@@ -101,6 +105,6 @@ def correct_transcript_segments(input_file, output_file=None):
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)
 
-    print(f"Transcription segmentation complete. Result saved to {output_file}.")
+    logger.info(f"Transcription segmentation complete. Result saved to {output_file}.")
 
     return output_file

@@ -188,7 +188,7 @@ def main():
             )
             return 1
 
-        logger.info(f"Starting video processing for job {job_id}")
+        logger.info(f"Starting job processing for job: {job_id} ...")
 
         result = process_job(
             job_id=job_id,
@@ -202,12 +202,12 @@ def main():
         )
 
         if result["status"] == "success":
-            logger.info(f"Processing completed successfully for job {job_id}")
+            logger.info(f"Processing completed successfully for job: {job_id}")
 
             update_job_status(job_id=job_id, step=15)
 
             try:
-                logger.info(f"Uploading results to S3 for job {job_id}")
+                logger.info(f"Uploading results to S3 for job: {job_id}")
                 result_urls = upload_results_to_s3(
                     job_id, params.get("user_is_premium", False)
                 )
@@ -216,11 +216,11 @@ def main():
 
                 finalize_job(job_id)
 
-                logger.info(f"Cleaning up temporary files for job {job_id}")
+                logger.info(f"Cleaning up temporary files for job: {job_id}")
 
                 cleanup_job_files(job_id)
 
-                logger.info(f"Job {job_id} completed successfully")
+                logger.info(f"Job: {job_id} completed successfully")
             except Exception as e:
                 logger.error(f"Error uploading results: {e}")
 

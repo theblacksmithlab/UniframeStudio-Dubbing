@@ -1,6 +1,10 @@
 import json
 import os
 import re
+from utils.logger_config import setup_logger
+
+
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def split_into_sentences(text):
@@ -91,7 +95,7 @@ def get_sentence_timestamps(sentence, segment, words_list):
     # buffer = 0.01  # 10ms buffer
 
     if timestamps["start"] >= timestamps["end"]:
-        print(f"WARNING: Invalid timestamps, using segment with buffer")
+        logger.warning(f"Invalid timestamps, using segment with buffer")
         return {
             "start": segment_start,
             "end": segment_end
@@ -120,7 +124,7 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
     segments = data.get("segments", [])
     words_list = data.get("words", [])
 
-    print(f"Optimizing {len(segments)} transcription segments...")
+    logger.info(f"Optimizing {len(segments)} transcription segments...")
 
     # STEP 1: Split segments into sentences with proper timestamps
     raw_segments = []
@@ -143,7 +147,7 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
                 timestamps = get_sentence_timestamps(sentence, segment, words_list)
 
                 if not timestamps:
-                    print(f"Warning: Could not find timestamps for sentence: {sentence[:30]}...")
+                    logger.warning(f"Warning: Could not find timestamps for sentence: {sentence[:30]}...")
                     continue
 
                 raw_segments.append({
@@ -185,7 +189,7 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
             "text": current_text
         })
 
-    print(f"After merging short segments: {len(merged_segments)} segments")
+    logger.info(f"After merging short segments: {len(merged_segments)} segments")
 
     # STEP 3: Assign IDs and fix any overlapping segments
     new_segments = []
@@ -202,7 +206,7 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
             midpoint = (new_segments[i]["end"] + new_segments[i + 1]["start"]) / 2
             new_segments[i]["end"] = midpoint
             new_segments[i + 1]["start"] = midpoint
-            print(f"Fixed overlap between segments {i} and {i + 1}")
+            logger.warning(f"Fixed overlap between segments {i} and {i + 1}")
 
     result = {
         "text": data.get("text", ""),
@@ -215,7 +219,7 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
-    print(f"Transcription optimization complete! {len(new_segments)} segments created.")
-    print(f"Result saved to: {output_file}")
+    logger.info(f"Transcription optimization complete! {len(new_segments)} segments created.")
+    logger.info(f"Result saved to: {output_file}")
 
     return output_file

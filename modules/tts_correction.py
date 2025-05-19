@@ -5,6 +5,10 @@ import openai
 from pydub import AudioSegment
 from modules.tts import make_api_request_with_retry
 from modules.tts import match_target_amplitude
+from utils.logger_config import setup_logger
+
+
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=None, voice="onyx", dealer="openai",
@@ -20,7 +24,7 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
 
     segments = data.get("segments", [])
     if not segments:
-        print("Error: There are no segments in the transcription file.")
+        logger.error("There are no segments in the transcription file.")
         return None
 
     target_segment = None
@@ -30,12 +34,12 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
             break
 
     if not target_segment:
-        print(f"Error: Segment with ID {segment_id} not found in the translation file.")
+        logger.error(f"Segment with ID {segment_id} not found in the translation file.")
         return None
 
     text = target_segment.get("translated_text", "").strip()
     if not text:
-        print(f"Error: Segment {segment_id} has no translated text.")
+        logger.error(f"Segment {segment_id} has no translated text.")
         return None
 
     start_time_ms = int(target_segment["start"] * 1000)
@@ -70,8 +74,8 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
         os.makedirs(segments_dir, exist_ok=True)
         output_audio_file = os.path.join(segments_dir, f"segment_{segment_id}.mp3")
 
-    print(f"Regenerating segment {segment_id}: '{text[:30]}...'")
-    print(
+    logger.info(f"Regenerating segment {segment_id}: '{text[:30]}...'")
+    logger.info(
         f"Start: {target_segment['start']}s, End: {target_segment['end']}s, Original Duration: {original_duration_sec}s")
 
     temp_dir = os.path.join(base_dir, "temp_audio_segments")
@@ -107,14 +111,14 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
             }
 
             if previous_ids:
-                print(f"Using previous request IDs: {previous_ids}")
+                logger.info(f"Using previous request IDs: {previous_ids}")
                 request_data["previous_request_ids"] = previous_ids[:3]
             else:
-                print("No previous request IDs available")
+                logger.info("No previous request IDs available")
 
             headers = {"xi-api-key": elevenlabs_api_key}
 
-            print(f"Using ElevenLabs voice ID: {voice}")
+            logger.info(f"Using ElevenLabs voice ID: {voice}")
             response = make_api_request_with_retry(
                 f"https://api.elevenlabs.io/v1/text-to-speech/{voice}/stream",
                 request_data,
@@ -123,10 +127,10 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
 
             current_request_id = response.headers.get("request-id")
             if current_request_id:
-                print(f"Got request_id: {current_request_id}")
+                logger.info(f"Got request_id: {current_request_id}")
                 data["segments"][segment_index]["request_id"] = current_request_id
             else:
-                print("Warning: No request_id received in response")
+                logger.info("Warning: No request_id received in response")
 
             with open(temp_file, "wb") as f:
                 f.write(response.content)
@@ -148,30 +152,30 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
         precise_duration = get_precise_audio_duration(temp_file)
         actual_duration_ms = precise_duration * 1000
 
-        print(f"Generated audio duration: {precise_duration:.6f}s ({actual_duration_ms:.2f}ms)")
+        logger.info(f"Generated audio duration: {precise_duration:.6f}s ({actual_duration_ms:.2f}ms)")
 
         data["segments"][segment_index]["tts_duration"] = round(precise_duration, 6)
 
         speed_ratio = actual_duration_ms / original_duration_ms
         data["segments"][segment_index]["speed_ratio"] = round(speed_ratio, 6)
 
-        print(f"Speed ratio for video adjustment: {speed_ratio:.4f}x")
+        logger.info(f"Speed ratio for video adjustment: {speed_ratio:.4f}x")
 
         diff_ratio = abs(actual_duration_ms - original_duration_ms) / original_duration_ms
         if diff_ratio > 0.2:
-            print(f"WARNING! TTS duration differs from original by more than 20% ({diff_ratio:.2%})")
+            logger.warning(f"ATTENTION! TTS duration differs from original by more than 20% ({diff_ratio:.2%})")
 
         segment_audio = AudioSegment.from_file(temp_file)
         segment_audio = match_target_amplitude(segment_audio, -16.0)
 
         segment_audio.export(output_audio_file, format="mp3", bitrate="192k")
-        print(f"Done! Segment audio saved to {output_audio_file}")
+        logger.info(f"Done! Segment audio saved to {output_audio_file}")
 
         with open(translation_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        print(f"Error processing segment {segment_id}: {e}")
+        logger.error(f"Error processing segment {segment_id}: {e}")
         import traceback
         traceback.print_exc()
         return None

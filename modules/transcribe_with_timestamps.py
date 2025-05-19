@@ -5,6 +5,10 @@ import subprocess
 from pydub import AudioSegment
 from utils.audio_utils import split_audio
 import openai
+from utils.logger_config import setup_logger
+
+
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, output_file=None, openai_api_key=None):
@@ -20,7 +24,7 @@ def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, 
         return float(result.stdout.strip())
 
     initial_audio_duration = get_precise_audio_duration(input_audio)
-    print(f"Initial audio duration: {initial_audio_duration:.3f} seconds")
+    logger.info(f"Initial audio duration: {initial_audio_duration:.3f} seconds")
 
     temp_audio_chunks_dir = f"jobs/{job_id}/output/temp_audio_chunks"
     os.makedirs(temp_audio_chunks_dir, exist_ok=True)
@@ -39,16 +43,16 @@ def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, 
     word_id = 0
 
     for i, chunk_path in enumerate(chunk_paths):
-        print(f"Processing chunk {i + 1}/{len(chunk_paths)}: {chunk_path}")
+        logger.info(f"Processing chunk {i + 1}/{len(chunk_paths)}: {chunk_path}")
 
         audio_chunk = AudioSegment.from_file(chunk_path)
         chunk_duration = len(audio_chunk) / 1000
 
         transcription = transcribe(chunk_path, source_language=source_language, openai_api_key=openai_api_key)
 
-        print(f"Chunk {i + 1}/{len(chunk_paths)} transcribed. Text: {transcription.get('text', '')[:50]}...")
-        print(f"Total number of segments: {len(transcription.get('segments', []))}")
-        print(f"Total number of words: {len(transcription.get('words', []))}")
+        logger.info(f"Chunk {i + 1}/{len(chunk_paths)} transcribed. Text: {transcription.get('text', '')[:50]}...")
+        logger.info(f"Total number of segments: {len(transcription.get('segments', []))}")
+        logger.info(f"Total number of words: {len(transcription.get('words', []))}")
 
         full_result["text"] += (
             " " + transcription.get("text", "") if full_result["text"] else transcription.get("text", ""))
@@ -82,8 +86,8 @@ def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, 
     if full_result["segments"]:
         last_segment_end = full_result["segments"][-1]["end"]
         outro_gap_duration = max(0.0, initial_audio_duration - last_segment_end)
-        print(f"Last segment ends at: {last_segment_end:.3f}s")
-        print(f"Outro gap duration: {outro_gap_duration:.3f}s")
+        logger.info(f"Last segment ends at: {last_segment_end:.3f}s")
+        logger.info(f"Outro gap duration: {outro_gap_duration:.3f}s")
 
     full_result["outro_gap_duration"] = outro_gap_duration
 
@@ -93,7 +97,7 @@ def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, 
     if os.path.exists(temp_audio_chunks_dir) and len(chunk_paths) > 1:
         shutil.rmtree(temp_audio_chunks_dir)
 
-    print(f"Timestamped transcription successfully finished! Result: {output_file}")
+    logger.info(f"Timestamped transcription successfully finished! Result: {output_file}")
     return output_file
 
 
@@ -158,5 +162,5 @@ def transcribe(file_path, source_language=None, openai_api_key=None):
 
         return result
     except Exception as e:
-        print(f"Error transcribing {file_path}: {str(e)}")
+        logger.error(f"Error transcribing {file_path}: {str(e)}")
         raise ValueError(f"Failed to transcribe audio: {str(e)}")
