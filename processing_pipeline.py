@@ -6,15 +6,38 @@ import shutil
 import subprocess
 import sys
 from modules.job_status import update_job_status
+from utils.logger_config import setup_logger
+
+
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def run_command(command):
-    print(f"Executing: {' '.join(command)}")
+    log_safe_command = command.copy()
+
+    for i, part in enumerate(log_safe_command):
+        if "--openai_api_key" in part and i < len(log_safe_command) - 1:
+            log_safe_command[i + 1] = "sk-***************"
+        elif "--elevenlabs_api_key" in part and i < len(log_safe_command) - 1:
+            log_safe_command[i + 1] = "***************"
+        elif part.startswith("--openai_api_key="):
+            log_safe_command[i] = "--openai_api_key=sk-***************"
+        elif part.startswith("--elevenlabs_api_key="):
+            log_safe_command[i] = "--elevenlabs_api_key=***************"
+
+    logger.info(f"Executing: {' '.join(command)}")
     try:
         subprocess.run(command, check=True)
         return True
     except subprocess.CalledProcessError as e:
-        print(f"Command execution error: {e}")
+        error_str = str(e)
+
+        if "openai_api_key" in error_str:
+            error_str = error_str.replace(error_str.split("openai_api_key")[1].split(" ")[0], "=sk-***************")
+        if "elevenlabs_api_key" in error_str:
+            error_str = error_str.replace(error_str.split("elevenlabs_api_key")[1].split(" ")[0], "=***************")
+
+        logger.error(f"Command execution error: {error_str}")
         return False
 
 
@@ -22,7 +45,7 @@ def add_intro_outro_audio(input_audio, output_audio, resources_dir):
     intro_outro_path = os.path.join(resources_dir, "intro_outro_audio.mp3")
 
     if not os.path.exists(intro_outro_path):
-        print(f"Warning: Intro/outro audio not found: {intro_outro_path}")
+        logger.error(f"Warning: Intro/outro audio not found: {intro_outro_path}")
         return False
 
     cmd = [
@@ -65,18 +88,18 @@ def combine_video_and_audio(video_path, audio_path, output_path):
             output_path
         ]
 
-        print(f"Combining: {os.path.basename(video_path)} + {os.path.basename(audio_path)}")
+        logger.info(f"Combining: {os.path.basename(video_path)} + {os.path.basename(audio_path)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
 
         if result.returncode == 0:
-            print(f"Successfully combined: {os.path.basename(output_path)}")
+            logger.info(f"Successfully combined: {os.path.basename(output_path)}")
             return True
         else:
-            print(f"FFmpeg error: {result.stderr}")
+            logger.error(f"FFmpeg error: {result.stderr}")
             return False
 
     except Exception as e:
-        print(f"Exception combining video and audio: {e}")
+        logger.error(f"Combining video and audio failed with error: {e}")
         return False
 
 
@@ -88,7 +111,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     audio_input_dir = f"{job_dir}/audio_input"
     result_output_dir = f"{job_dir}/output"
 
-    print(f"Creating directory structure for job {job_id}...")
+    logger.info(f"Creating directory structure for job: {job_id}...")
     os.makedirs(input_video_dir, exist_ok=True)
     os.makedirs(processing_jsons_dir, exist_ok=True)
     os.makedirs(audio_input_dir, exist_ok=True)
@@ -106,25 +129,25 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         }
 
     if len(video_files) > 1:
-        print(f"Warning: Multiple video files found in {input_video_dir}. Using the first one: {video_files[0]}")
+        logger.warning(f"Multiple video files found in {input_video_dir}. Using the first one: {video_files[0]}")
 
     video_path = os.path.join(input_video_dir, video_files[0])
     base_name = os.path.splitext(video_files[0])[0]
 
-    print(f"\n{'=' * 50}")
-    print(f"Processing job: {job_id}")
-    print(f"Video file: {video_path}")
+    logger.info(f"{'=' * 50}")
+    logger.info(f"Processing job: {job_id}")
+    logger.info(f"Video file: {video_path}")
     if source_language:
-        print(f"Source language: {source_language}")
-    print(f"Target language: {target_language}")
-    print(f"TTS provider: {tts_provider}")
-    print(f"TTS voice: {tts_voice}")
+        logger.info(f"Source language: {source_language}")
+    logger.info(f"Target language: {target_language}")
+    logger.info(f"TTS provider: {tts_provider}")
+    logger.info(f"TTS voice: {tts_voice}")
 
     # [Step 1]
     current_step = 3
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 1] Extracting audio from video {video_path}...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 1] Extracting audio from video {video_path}...")
     audio_path = f"{audio_input_dir}/{base_name}.mp3"
     extract_cmd = [sys.executable, "cli.py", "extract_audio", "--input", video_path, "--output", audio_path]
 
@@ -144,14 +167,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    print(f"Audio file created: {audio_path}")
-    print(f"\n")
+    logger.info(f"Audio file created: {audio_path}")
 
     # [Step 2]
     current_step = 4
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 2] Transcribing audio {os.path.basename(audio_path)}...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 2] Transcribing audio {os.path.basename(audio_path)}...")
     transcription_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed.json")
     transcribe_cmd = [sys.executable, "cli.py", "transcribe",
                       "--input", audio_path,
@@ -178,14 +200,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    print(f"Transcription file created: {transcription_path}")
-    print(f"\n")
+    logger.info(f"Transcription file created: {transcription_path}")
 
     # [Step 3]
     current_step = 5
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 3] Structuring transcription {os.path.basename(transcription_path)}...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 3] Structuring transcription {os.path.basename(transcription_path)}...")
     corrected_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected.json")
     correct_cmd = [sys.executable, "cli.py", "correct", "--input", transcription_path, "--output", corrected_path]
 
@@ -205,14 +226,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    print(f"Corrected transcription file created: {corrected_path}")
-    print(f"\n")
+    logger.info(f"Corrected transcription file created: {corrected_path}")
 
     # [Step 4]
     current_step = 6
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 4] Cleaning transcription {os.path.basename(corrected_path)}...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 4] Cleaning transcription {os.path.basename(corrected_path)}...")
     cleaned_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned.json")
     cleanup_cmd = [sys.executable, "cli.py", "cleanup", "--input", corrected_path, "--output", cleaned_path]
 
@@ -232,14 +252,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    print(f"Cleaned transcription file created: {cleaned_path}")
-    print(f"\n")
+    logger.info(f"Cleaned transcription file created: {cleaned_path}")
 
     # [Step 5]
     current_step = 7
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 5] Optimizing segments in transcription {os.path.basename(cleaned_path)}...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 5] Optimizing segments in transcription {os.path.basename(cleaned_path)}...")
     optimized_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned_optimized.json")
     optimize_cmd = [sys.executable, "cli.py", "optimize", "--input", cleaned_path, "--output", optimized_path]
 
@@ -259,14 +278,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    print(f"Optimized transcription file created: {optimized_path}")
-    print(f"\n")
+    logger.info(f"Optimized transcription file created: {optimized_path}")
 
     # [Step 6]
     current_step = 8
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 6] Adjusting segments timing in transcription {os.path.basename(optimized_path)}...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 6] Adjusting segments timing in transcription {os.path.basename(optimized_path)}...")
     adjusted_path = os.path.join(
         processing_jsons_dir,
         f"{base_name}_transcribed_corrected_cleaned_optimized_adjusted.json"
@@ -289,14 +307,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    print(f"Adjusted transcription file created: {adjusted_path}")
-    print(f"\n")
+    logger.info(f"Adjusted transcription file created: {adjusted_path}")
 
     # [Step 7]
     current_step = 9
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 7] Translating transcription segments in {os.path.basename(adjusted_path)}...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 7] Translating transcription segments in {os.path.basename(adjusted_path)}...")
     translated_path = os.path.join(
         processing_jsons_dir,
         f"{base_name}_transcribed_corrected_cleaned_optimized_adjusted_translated.json"
@@ -324,14 +341,13 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    print(f"Segments translation file created: {translated_path}")
-    print(f"\n")
+    logger.info(f"Segments translation file created: {translated_path}")
 
     # [Step 8]
     current_step = 10
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 8] Generating audio using {tts_provider} with voice {tts_voice}...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 8] Generating audio using {tts_provider} with voice {tts_voice}...")
 
     tts_cmd = [sys.executable, "cli.py", "tts",
                "--input", translated_path,
@@ -361,7 +377,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
                 "step": current_step
             }
 
-    print(f"Running TTS command: {' '.join(tts_cmd[:6])}...")
+    logger.info(f"Running TTS command: {' '.join(tts_cmd[:6])}...")
 
     if not run_command(tts_cmd):
         return {
@@ -384,7 +400,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     audio_segments_dir = os.path.join(result_output_dir, "audio_segments")
     if not os.path.exists(audio_segments_dir) or not any(f.endswith('.mp3') for f in os.listdir(audio_segments_dir)):
-        print(f"Warning: Audio segments directory {audio_segments_dir} is empty or missing")
+        logger.error(f"Warning: Audio segments directory {audio_segments_dir} is empty or missing")
         return {
             "status": "error",
             "message": f"Failed to generate TTS audio",
@@ -392,16 +408,15 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    print(f"TTS generation completed!")
-    print(f"Audio segments saved to: {audio_segments_dir}")
-    print(f"Final audio saved to: {expected_audio_path}")
-    print(f"\n")
+    logger.info(f"TTS generation completed!")
+    logger.info(f"Audio segments saved to: {audio_segments_dir}")
+    logger.info(f"Final audio saved to: {expected_audio_path}")
 
     # [Step 9]
     current_step = 11
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 9] Auto-correcting segment durations...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 9] Auto-correcting segment durations...")
     auto_correct_cmd = [sys.executable, "cli.py", "auto-correct",
                         "--input", translated_path,
                         "--job_id", job_id,
@@ -427,23 +442,22 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     final_audio_path = os.path.join(audio_result_dir, "new_audio.mp3")
     final_stereo_path = os.path.join(audio_result_dir, "new_audio_stereo.mp3")
 
-    print(f"Auto-correction completed!")
-    print(f"Final audio file: {final_audio_path}")
+    logger.info(f"Auto-correction completed!")
+    logger.info(f"Final audio file: {final_audio_path}")
     if os.path.exists(final_stereo_path):
-        print(f"Final stereo file: {final_stereo_path}")
-    print(f"\n")
+        logger.info(f"Final stereo file: {final_stereo_path}")
 
     # [Step 10]
     current_step = 12
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 10] Creating audio versions with intro/outro...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 10] Creating audio versions with intro/outro...")
 
     final_audio_with_ads = os.path.join(audio_result_dir, "new_audio_ads.mp3")
     final_stereo_with_ads = os.path.join(audio_result_dir, "new_audio_stereo_ads.mp3")
 
     if not is_premium:
-        print("Creating audio with intro/outro...")
+        logger.info("Creating audio with intro/outro...")
         if not add_intro_outro_audio(final_audio_path, final_audio_with_ads, "resources"):
             return {
                 "status": "error",
@@ -461,31 +475,30 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             }
 
         if not create_stereo_version(final_audio_with_ads, final_stereo_with_ads):
-            print(f"Warning: Failed to create stereo version of audio with ads, but continuing...")
+            logger.warning(f"Failed to create stereo version of audio with ads, but continuing...")
         elif not os.path.exists(final_stereo_with_ads):
-            print(f"Warning: Stereo audio with ads file {final_stereo_with_ads} not created, but continuing...")
+            logger.warning(f"Stereo audio with ads file {final_stereo_with_ads} not created, but continuing...")
         else:
-            print(f"Successfully created stereo version with ads: {final_stereo_with_ads}")
+            logger.info(f"Successfully created stereo version with ads: {final_stereo_with_ads}")
 
     else:
-        print("Premium user - skipping intro/outro for audio")
+        logger.info("Premium user - skipping intro/outro for audio")
 
-    print(f"Audio processing completed!")
-    print(f"Clean audio: {final_audio_path}")
-    print(f"Clean stereo: {final_stereo_path}")
+    logger.info(f"Audio processing completed!")
+    logger.info(f"Clean audio: {final_audio_path}")
+    logger.info(f"Clean stereo: {final_stereo_path}")
     if not is_premium:
-        print(f"Audio with ads: {final_audio_with_ads}")
+        logger.info(f"Audio with ads: {final_audio_with_ads}")
         if os.path.exists(final_stereo_with_ads):
-            print(f"Stereo with ads: {final_stereo_with_ads}")
+            logger.info(f"Stereo with ads: {final_stereo_with_ads}")
         else:
-            print("Stereo audio with ads: not created")
-    print("\n")
+            logger.warning("Stereo audio with ads: not created")
 
     # [Step 11]
     current_step = 13
     update_job_status(job_id=job_id, step=13)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 11] Processing video with new audio...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 11] Processing video with new audio...")
     video_result_dir = os.path.join(result_output_dir, "video_result")
     os.makedirs(video_result_dir, exist_ok=True)
 
@@ -535,28 +548,27 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
                 "step": current_step
             }
 
-    print(f"Video processing completed!")
-    print(f"Mute videos created successfully")
-    print(f"\n")
+    logger.info(f"Video processing completed!")
+    logger.info(f"Mute videos created successfully")
 
     # [Step 12]
     current_step = 14
     update_job_status(job_id=job_id, step=current_step)
-    print(f"\n{'=' * 25}")
-    print(f"\n[Step 12] Combining mute videos with stereo audio...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 12] Combining mute videos with stereo audio...")
 
     final_video_path = os.path.join(video_result_dir, f"{base_name}_tts_based.mp4")
     final_video_path_premium = os.path.join(video_result_dir, f"{base_name}_tts_based_premium.mp4")
 
     if is_premium:
-        print("Premium user: combining premium mute video with audio...")
+        logger.info("Premium user: combining premium mute video with audio...")
 
         if os.path.exists(final_stereo_path):
             audio_for_premium = final_stereo_path
-            print(f"Using stereo audio for premium video: {os.path.basename(audio_for_premium)}")
+            logger.info(f"Using stereo audio for premium video: {os.path.basename(audio_for_premium)}")
         else:
             audio_for_premium = final_audio_path
-            print(
+            logger.warning(
                 f"Stereo audio not found, using regular audio for premium video: {os.path.basename(audio_for_premium)}")
 
         if not combine_video_and_audio(final_video_path_mute_premium, audio_for_premium, final_video_path_premium):
@@ -567,14 +579,14 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
                 "step": current_step
             }
     else:
-        print("Regular user: combining standard mute video with audio (with ads)...")
+        logger.info("Regular user: combining standard mute video with audio (with ads)...")
 
         if os.path.exists(final_stereo_with_ads):
             audio_for_standard = final_stereo_with_ads
-            print(f"Using stereo audio with ads: {os.path.basename(audio_for_standard)}")
+            logger.info(f"Using stereo audio with ads: {os.path.basename(audio_for_standard)}")
         elif os.path.exists(final_audio_with_ads):
             audio_for_standard = final_audio_with_ads
-            print(
+            logger.warning(
                 f"Stereo audio with ads not found, using regular audio with ads: {os.path.basename(audio_for_standard)}")
         else:
             return {
@@ -592,14 +604,14 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
                 "step": current_step
             }
 
-        print("Regular user: combining premium mute video with clean audio...")
+        logger.info("Regular user: combining premium mute video with clean audio...")
 
         if os.path.exists(final_stereo_path):
             audio_for_premium = final_stereo_path
-            print(f"Using clean stereo audio for premium version: {os.path.basename(audio_for_premium)}")
+            logger.info(f"Using clean stereo audio for premium version: {os.path.basename(audio_for_premium)}")
         else:
             audio_for_premium = final_audio_path
-            print(f"Stereo audio not found, using regular clean audio: {os.path.basename(audio_for_premium)}")
+            logger.warning(f"Stereo audio not found, using regular clean audio: {os.path.basename(audio_for_premium)}")
 
         if not combine_video_and_audio(final_video_path_mute_premium, audio_for_premium, final_video_path_premium):
             return {
@@ -609,13 +621,12 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
                 "step": current_step
             }
 
-    print(f"Video-audio combination completed!")
+    logger.info(f"Video-audio combination completed!")
     if is_premium:
-        print(f"Premium video (with stereo): {final_video_path_premium}")
+        logger.info(f"Premium video (with stereo): {final_video_path_premium}")
     else:
-        print(f"Video with ads (with stereo): {final_video_path}")
-        print(f"Premium video (with stereo): {final_video_path_premium}")
-    print(f"\n")
+        logger.info(f"Video with ads (with stereo): {final_video_path}")
+        logger.info(f"Premium video (with stereo): {final_video_path_premium}")
 
     result = {
         "status": "success",
@@ -650,8 +661,8 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     }
 
     # [Cleanup]
-    print(f"\n{'=' * 25}")
-    print(f"\n[Cleanup] Moving final files and cleaning up temporary data...")
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Cleanup] Moving final files and cleaning up temporary data...")
 
     job_result_dir = os.path.join(f"jobs/{job_id}", "job_result")
     os.makedirs(job_result_dir, exist_ok=True)
@@ -691,9 +702,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         if os.path.exists(src):
             shutil.copy2(src, dst)
             moved_files.append(os.path.basename(dst))
-            print(f"Copied: {os.path.basename(src)} to result directory")
+            logger.info(f"Copied: {os.path.basename(src)} to result directory")
         else:
-            print(f"Warning: File not found: {src}")
+            logger.warning(f"Warning: File not found: {src}")
 
     result["output_files"]["final_audio"] = os.path.join(job_result_dir, os.path.basename(final_audio_path))
     result["output_files"]["final_audio_stereo"] = os.path.join(job_result_dir, os.path.basename(final_stereo_path))
@@ -716,18 +727,17 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     with open(os.path.join(job_result_dir, "pipeline_result.json"), "w") as f:
         json.dump(result, f, indent=2)
 
-    print(f"Files copied to result directory: {job_result_dir}")
-    print(f"Result files: {moved_files}")
-    print(f"\n")
+    logger.info(f"Files copied to result directory: {job_result_dir}")
+    logger.info(f"Result files: {moved_files}")
 
-    print(f"\n{'=' * 50}")
-    print("\n\n=================================================================")
-    print(f"COMPLETE VIDEO PROCESSING FINISHED SUCCESSFULLY!")
-    print(f"Job ID: {job_id}")
-    print(f"Original video: {video_path}")
-    print(f"Final video: {final_video_path_mute}")
-    print(f"Total steps completed: {len(result['steps_completed'])}")
-    print("=================================================================\n")
+    logger.info(f"{'=' * 50}")
+    logger.info("=================================================================")
+    logger.info(f"COMPLETE VIDEO PROCESSING FINISHED SUCCESSFULLY!")
+    logger.info(f"Job ID: {job_id}")
+    logger.info(f"Original video: {video_path}")
+    logger.info(f"Final video: {final_video_path_mute}")
+    logger.info(f"Total steps completed: {len(result['steps_completed'])}")
+    logger.info("=================================================================")
 
     return result
 
@@ -747,7 +757,7 @@ def main():
     args = parser.parse_args()
 
     if args.tts_provider == "elevenlabs" and not args.elevenlabs_api_key:
-        print("Error: ElevenLabs API key is required for ElevenLabs TTS provider.")
+        logger.error("Error: ElevenLabs API key is required for ElevenLabs TTS provider.")
         return 1
 
     os.makedirs("jobs", exist_ok=True)
@@ -764,7 +774,7 @@ def main():
     )
 
     if result["status"] == "error":
-        print(f"Error processing job {args.job_id}: {result['message']}")
+        logger.error(f"Error processing job {args.job_id}: {result['message']}")
         return 1
 
     return 0

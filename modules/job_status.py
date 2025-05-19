@@ -132,7 +132,7 @@ def update_job_status(job_id: str,
         return True
 
     except Exception as e:
-        print(f"Error updating job status for {job_id}: {str(e)}")
+        logger.error(f"Error updating job status for {job_id}: {str(e)}")
         return False
 
 

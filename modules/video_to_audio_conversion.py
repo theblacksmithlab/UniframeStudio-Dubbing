@@ -1,5 +1,9 @@
 import os
 import subprocess
+from utils.logger_config import setup_logger
+
+
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def extract_audio(input_video_path, extracted_audio_path=None):
@@ -30,10 +34,10 @@ def extract_audio(input_video_path, extracted_audio_path=None):
         raise FileNotFoundError(f"Audio file was not created at {extracted_audio_path}")
 
     file_size_mb = os.path.getsize(extracted_audio_path) / (1024 * 1024)
-    print(f"Audio successfully extracted: {extracted_audio_path} (Size: {file_size_mb:.2f} MB)")
+    logger.info(f"Audio successfully extracted: {extracted_audio_path} (Size: {file_size_mb:.2f} MB)")
 
     if file_size_mb > 25:
-        print(f"WARNING: Audio file is larger than 25MB ({file_size_mb:.2f} MB). "
+        logger.warning(f"WARNING: Audio file is larger than 25MB ({file_size_mb:.2f} MB). "
               f"It will be split into chunks at the transcription step.")
 
     return extracted_audio_path

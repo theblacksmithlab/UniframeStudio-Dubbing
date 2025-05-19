@@ -49,6 +49,7 @@ class JobResult(BaseModel):
 
 @app.get("/job/{job_id}", response_model=JobStatus)
 async def get_job_status(job_id: str):
+    logger.info(f"Got status request for job: {job_id}")
     try:
         status_data = get_or_create_job_status(job_id)
 
@@ -69,6 +70,7 @@ async def get_job_status(job_id: str):
 
 @app.get("/job/{job_id}/result", response_model=JobResult)
 async def get_job_result(job_id: str):
+    logger.info(f"Got job results request for job: {job_id}")
     try:
         status_data = get_or_create_job_status(job_id)
 
@@ -87,6 +89,8 @@ async def get_job_result(job_id: str):
 
 @app.post("/process-video", response_model=JobStatus)
 async def start_video_processing(request: ProcessVideoRequest):
+    logger.info(f"Got job processing request | Job id: {request.job_id}")
+
     if not request.job_id:
         raise HTTPException(status_code=400, detail="Job_id is required")
 
@@ -149,57 +153,6 @@ async def start_video_processing(request: ProcessVideoRequest):
         error_message=job_status.get("error_message"),
     )
 
-
-# async def process_video_job(request: ProcessVideoRequest):
-#     job_id = request.job_id
-#
-#     try:
-#         update_job_status(job_id=job_id, step=2)
-#
-#         # await download_video_from_s3(request.video_url, job_id)
-#
-#         fake_download_video_from_s3(request.video_url, job_id)
-#
-#         result = process_job(
-#             job_id=job_id,
-#             source_language=request.source_language,
-#             target_language=request.target_language,
-#             tts_provider=request.tts_provider,
-#             tts_voice=request.tts_voice,
-#             elevenlabs_api_key=request.api_keys.get("elevenlabs"),
-#             openai_api_key=request.api_keys.get("openai"),
-#             is_premium=request.user_is_premium
-#         )
-#
-#         if result["status"] == "success":
-#             update_job_status(job_id=job_id, step=15)
-#
-#             result_urls = await upload_results_to_s3(job_id, request.user_is_premium)
-#
-#             update_job_status(
-#                 job_id=job_id,
-#                 step=16,
-#                 result_urls=result_urls
-#             )
-#
-#             await finalize_job(job_id)
-#         else:
-#             step = result.get("step")
-#
-#             update_job_status(
-#                 job_id=job_id,
-#                 status=JOB_STATUS_FAILED,
-#                 step=step,
-#                 error_message=result.get("message", "Unknown error")
-#             )
-#
-#     except Exception as e:
-#         logger.error(f"Error processing job {job_id}: {str(e)}")
-#         update_job_status(
-#             job_id=job_id,
-#             status=JOB_STATUS_FAILED,
-#             error_message=str(e)
-#         )
 
 if __name__ == "__main__":
     load_dotenv()

@@ -7,6 +7,10 @@ import openai
 import requests
 from pydub import AudioSegment
 import subprocess
+from utils.logger_config import setup_logger
+
+
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, voice="onyx", dealer="openai",
@@ -32,10 +36,10 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
 
     segments = data.get("segments", [])
     if not segments:
-        print("Error: There are no segments in the transcription file.")
+        logger.error("There are no segments in the transcription file.")
         return None
 
-    print(f"Uploaded {len(segments)} segments for voice-over using {dealer}")
+    logger.info(f"Uploaded {len(segments)} segments for voice-over using {dealer}")
 
     segments_dir = os.path.join(base_dir, "audio_segments")
     os.makedirs(segments_dir, exist_ok=True)
@@ -48,7 +52,7 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
     for i, segment in enumerate(segments):
         text = segment.get("translated_text", "").strip()
         if not text:
-            print(f"Skipping segment {i + 1}/{len(segments)}: empty text")
+            logger.warning(f"Skipping segment {i + 1}/{len(segments)}: empty text")
             continue
 
         start_time_ms = int(segment["start"] * 1000)
@@ -57,8 +61,8 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
         original_duration_sec = round(segment["end"] - segment["start"], 6)
         data["segments"][i]["original_duration"] = original_duration_sec
 
-        print(f"Processing segment {i + 1}/{len(segments)}: '{text[:30]}...'")
-        print(f"Start: {segment['start']}s, End: {segment['end']}s, Target Duration: {original_duration_ms / 1000}s")
+        logger.info(f"Processing segment {i + 1}/{len(segments)}: '{text[:30]}...'")
+        logger.info(f"Start: {segment['start']}s, End: {segment['end']}s, Target Duration: {original_duration_ms / 1000}s")
 
         segment_file = os.path.join(segments_dir, f"segment_{i}.mp3")
         temp_file = os.path.join(temp_dir, f"segment_{i}.mp3")
@@ -110,9 +114,9 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
                         previous_ids.append(generate_tts_for_segments.segment_request_ids[i - 2])
                     if previous_ids:
                         request_data["previous_request_ids"] = previous_ids[:3]
-                        print(f"Using previous request IDs: {previous_ids}")
+                        logger.info(f"Using previous request IDs: {previous_ids}")
                     else:
-                        print("No previous request IDs available")
+                        logger.info("No previous request IDs available")
 
                 headers = {"xi-api-key": elevenlabs_api_key}
 
@@ -125,10 +129,10 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
                 current_request_id = response.headers.get("request-id")
                 if current_request_id:
                     generate_tts_for_segments.segment_request_ids[i] = current_request_id
-                    print(f"Got request_id: {current_request_id}")
+                    logger.info(f"Got request_id: {current_request_id}")
                     data["segments"][i]["request_id"] = current_request_id
                 else:
-                    print("Warning: No request_id received in response")
+                    logger.info("Warning: No request_id received in response")
 
                 with open(temp_file, "wb") as f:
                     f.write(response.content)
@@ -149,19 +153,19 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
             precise_duration = get_precise_audio_duration(temp_file)
             actual_duration_ms = precise_duration * 1000
 
-            print(f"Generated audio duration: {actual_duration_ms}ms")
+            logger.info(f"Generated audio duration: {actual_duration_ms}ms")
             data["segments"][i]["tts_duration"] = round(actual_duration_ms / 1000, 6)
 
             diff_ratio = abs(actual_duration_ms - original_duration_ms) / original_duration_ms
             if diff_ratio > 0.2:
-                print(f"WARNING! TTS duration differs from target by more than 20% ({diff_ratio:.2%})")
+                logger.warning(f"ATTENTION! TTS duration differs from target by more than 20% ({diff_ratio:.2%})")
 
             data["segments"][i]["speed_ratio"] = round(diff_ratio, 2)
 
             segment_audio = match_target_amplitude(segment_audio, -16.0)
 
             segment_audio.export(segment_file, format="mp3", bitrate="192k")
-            print(f"  Saved segment to {segment_file}")
+            logger.info(f"Saved segment to {segment_file}")
 
             generated_segments.append({
                 "id": i,
@@ -173,7 +177,7 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
             os.remove(temp_file)
 
         except Exception as e:
-            print(f"Error processing segment {i}: {e}")
+            logger.error(f"Error processing segment {i}: {e}")
             import traceback
             traceback.print_exc()
             if os.path.exists(temp_file):
@@ -184,16 +188,16 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
             continue
 
     if not generated_segments:
-        print("Error: No segments were successfully processed.")
+        logger.error("No segments were successfully processed.")
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
         return None
 
     try:
-        print("Assembling final audio file...")
+        logger.info("Assembling final audio file...")
         assemble_audio_file(generated_segments, output_audio_file, data)
     except Exception as e:
-        print(f"Error assembling final audio file: {e}")
+        logger.error(f"Error assembling final audio file: {e}")
         import traceback
         traceback.print_exc()
         if os.path.exists(temp_dir):
@@ -204,18 +208,18 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
     except Exception as e:
-        print(f"Warning: Failed to clean up temporary directory: {e}")
+        logger.warning(f"Failed to clean up temporary directory: {e}")
 
     try:
         with open(translation_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"Error saving updated data to file: {e}")
+        logger.error(f"Error saving updated data to file: {e}")
         return None
 
-    print(f"\nTTS generation completed successfully!")
-    print(f"Individual segments saved in: {segments_dir}")
-    print(f"Final audio saved to: {output_audio_file}")
+    logger.info(f"TTS generation completed successfully!")
+    logger.info(f"Individual segments saved in: {segments_dir}")
+    logger.info(f"Final audio saved to: {output_audio_file}")
 
     return output_audio_file
 
@@ -227,7 +231,7 @@ def match_target_amplitude(sound, target_dBFS):
 
 def assemble_audio_file(segments, output_file, json_data=None):
     if not segments:
-        print("No segments to assemble")
+        logger.error("No segments to assemble")
         return None
 
     segments.sort(key=lambda x: x["start_time_ms"])
@@ -256,11 +260,11 @@ def assemble_audio_file(segments, output_file, json_data=None):
         outro_gap_duration_ms = json_data["outro_gap_duration"] * 1000
         if outro_gap_duration_ms > 0:
             final_audio += AudioSegment.silent(duration=outro_gap_duration_ms)
-            print(f"Added {outro_gap_duration_ms:.0f}ms outro gap from original")
+            logger.info(f"Added {outro_gap_duration_ms:.0f}ms outro gap from original")
 
     final_audio.export(output_file, format="mp3", bitrate="192k")
-    print(f"Final audio assembled and saved to {output_file}")
-    print(f"Final audio duration: {len(final_audio) / 1000:.2f} seconds")
+    logger.info(f"Final audio assembled and saved to {output_file}")
+    logger.info(f"Final audio duration: {len(final_audio) / 1000:.2f} seconds")
 
     stereo_output_file = os.path.splitext(output_file)[0] + "_stereo.mp3"
 
@@ -277,14 +281,14 @@ def assemble_audio_file(segments, output_file, json_data=None):
             result = subprocess.run(cmd, capture_output=True, text=True)
 
             if os.path.exists(stereo_output_file):
-                print(f"Stereo version of audio created and saved to {stereo_output_file}")
+                logger.info(f"Stereo version of audio created and saved to {stereo_output_file}")
             else:
-                print(f"Failed to create stereo version. Command exit code: {result.returncode}")
+                logger.warning(f"Failed to create stereo version. Command exit code: {result.returncode}")
         else:
-            print(f"Cannot create stereo version because original file not found: {output_file}")
+            logger.warning(f"Cannot create stereo version because original file not found: {output_file}")
 
     except Exception as e:
-        print(f"Error creating stereo version: {e}")
+        logger.warning(f"Error creating stereo version: {e}")
 
     return output_file
 
@@ -301,13 +305,13 @@ def reassemble_audio_file(translation_file, job_id, output_audio_file=None):
 
     segments = data.get("segments", [])
     if not segments:
-        print("Error: There are no segments in the transcription file.")
+        logger.error("There are no segments in the transcription file.")
         return None
 
     segments_dir = os.path.join(base_dir, "audio_segments")
 
     if not os.path.exists(segments_dir):
-        print(f"Error: Segments directory {segments_dir} not found. Have you generated the segments first?")
+        logger.error(f"Segments directory {segments_dir} not found. Have you generated the segments first?")
         return None
 
     available_segments = []
@@ -330,13 +334,13 @@ def reassemble_audio_file(translation_file, job_id, output_audio_file=None):
             missing_segments.append(i)
 
     if missing_segments:
-        print(f"Warning: The following segments are missing: {missing_segments}")
+        logger.warning(f"The following segments are missing: {missing_segments}")
         if not available_segments:
-            print("Error: No segments found to assemble.")
+            logger.error("No segments found to assemble.")
             return None
-        print("Proceeding with available segments only.")
+        logger.warning("Proceeding with available segments only.")
 
-    print(f"Reassembling audio file from {len(available_segments)} segments...")
+    logger.info(f"Reassembling audio file from {len(available_segments)} segments...")
     result = assemble_audio_file(available_segments, output_audio_file, data)
 
     return result
@@ -354,7 +358,7 @@ def make_api_request_with_retry(url, data, headers, max_retries=10, retry_delay=
             if response.status_code == 200:
                 return response
             else:
-                print(f"API error (attempt {retries + 1}/{max_retries}): {response.status_code} - {response.text}")
+                logger.warning(f"API error (attempt {retries + 1}/{max_retries}): {response.status_code} - {response.text}")
                 last_status_code = response.status_code
                 last_response_text = response.text
 
@@ -362,12 +366,12 @@ def make_api_request_with_retry(url, data, headers, max_retries=10, retry_delay=
                     raise ValueError(f"API returned error {response.status_code}: {response.text}")
         except (requests.RequestException, TimeoutError, ConnectionError, ssl.SSLError) as e:
             last_exception = e
-            print(f"Request failed (attempt {retries + 1}/{max_retries}): {e}")
+            logger.warning(f"Request failed (attempt {retries + 1}/{max_retries}): {e}")
 
         retries += 1
         if retries < max_retries:
             sleep_time = retry_delay * retries
-            print(f"Retrying in {sleep_time} seconds...")
+            logger.info(f"Retrying in {sleep_time} seconds...")
             time.sleep(sleep_time)
 
     if last_status_code:

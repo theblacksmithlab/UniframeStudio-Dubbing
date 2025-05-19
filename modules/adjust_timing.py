@@ -1,4 +1,8 @@
 import json
+from utils.logger_config import setup_logger
+
+
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def adjust_segments_timing(file_path, output_file=None):
@@ -22,11 +26,11 @@ def adjust_segments_timing(file_path, output_file=None):
             old_end = segments[i]['end']
             segments[i]['end'] = next_start
             adjusted_count += 1
-            print(f"Adjusted segment {i}: end time {old_end:.3f}s -> {next_start:.3f}s (gap was {gap:.3f}s)")
+            logger.warning(f"Adjusted segment {i}: end time {old_end:.3f}s -> {next_start:.3f}s (gap was {gap:.3f}s)")
         else:
-            print(f"Segment {i}: keeping gap of {gap:.3f}s")
+            logger.warning(f"Segment {i}: keeping gap of {gap:.3f}s")
 
-    print(f"Timing adjustment complete. {adjusted_count} segments adjusted.")
+    logger.info(f"Timing adjustment complete. {adjusted_count} segments adjusted.")
 
     if output_file is None:
         output_file = file_path.replace('.json', '_adjusted.json')
