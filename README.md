@@ -23,7 +23,15 @@
 
 ## 🎬 Demo
 
-_Coming soon..._
+### Original Video (Russian)
+[![Original Video](https://img.youtube.com/vi/d341QKt-Szs/0.jpg)](https://youtu.be/d341QKt-Szs)
+
+### Processed Video (English dub)
+[![Processed Video](https://img.youtube.com/vi/dg0AJE4k8Bg/0.jpg)](https://youtu.be/dg0AJE4k8Bg)
+
+Click on the thumbnails above to watch the videos, or use these direct links:
+- [Original Video (Russian)](https://youtu.be/d341QKt-Szs)
+- [Processed Video (English dub)](https://youtu.be/dg0AJE4k8Bg)
 
 ---
 
