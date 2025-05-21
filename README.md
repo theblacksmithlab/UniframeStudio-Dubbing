@@ -50,7 +50,8 @@ _Coming soon..._
 
 ## Features
 
-- Full CLI control (all steps available to use separately via `cli.py` commands).
+- REST API for easy integration with other systems.
+- CLI interface with individual commands for each processing step.
 - Accurate transcription and it's structure correction.
 - Multi-language support via high-quality translation.
 - Voiceover with choice of synthetic voices.
@@ -59,41 +60,16 @@ _Coming soon..._
 
 ---
 
+# API Usage
+The system provides a REST API for easy integration:
+
+_Coming soon..._
+
+---
+
 ## CLI Usage
 
-All commands are available to use separately in the `cli.py` interface. Each command is described in detail in `DEV_NOTES.md`, including args, expected inputs and outputs.
-
-## 🚀 Example of the full pipeline:
-
-❗️Before running the pipeline, you may want to check out available processing options such as voice selection, intro/outro addition, and other advanced features.
-Refer to DEV_NOTES.md for details.
-
-🔧 Don't forget to provide you API-keys for transcription, translation and TTS services - Eleven Labs (with ELEVEN_LABS_VOICE_ID) or OpenAI, depending on who's API you are going to use.
-
-🔧 Make sure you have **ffmpeg** installed at the system level.
-
-**1. Processing pipeline | Stage 1:** 
-
-- Place the source video file in the ./video_input folder.
-- Run the first stage of the processing pipeline with the following command:
-
-```bash
-python processing_pipeline_stage1.py --input video_input/input.mp4
-```
-
-- As a result of Stage 1, you’ll get a file named input_transcribed_corrected_cleaned_optimized_adjusted.json in the ./output/timestamped_transcriptions folder.
-- You can verify that the transcription is accurate by comparing some segment timestamps with the source video. 
-- If everything looks good, proceed to Stage 2 of the pipeline.
-
-**2. Processing pipeline | Stage 2:**
-
-```bash
-python processing_pipeline_stage2.py --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned_optimized_adjusted.json
-```
-
-- As a result of Stage 2, you’ll get two versions (mono and stereo) of the new audio track in the ./output/audio_result folder.
-
-**3. Processing pipeline | Stage 3:**
+All processing steps are available individually through the CLI interface:
 
 _Coming soon..._
 

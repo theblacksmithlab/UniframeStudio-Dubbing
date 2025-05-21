@@ -1,6 +1,6 @@
-# DEV_NOTES
+# DEV_NOTES:
 
-# Extract audio from video file:
+## Extract audio from video file:
 
 ```bash
 python cli.py extract_audio --input input/example.mp4
@@ -8,7 +8,7 @@ python cli.py extract_audio --input input/example.mp4
 
 =================================================================
 
-# Timestamped transcription:
+## Timestamped transcription:
 
 ```bash
 python cli.py transcribe --input input/example.mp3
@@ -16,7 +16,7 @@ python cli.py transcribe --input input/example.mp3
 
 =================================================================
 
-# Timestamped transcription correction:
+## Timestamped transcription correction:
 
 ```bash
 python cli.py correct --input output/timestamped_transcriptions/example_transcribed.json
@@ -24,7 +24,7 @@ python cli.py correct --input output/timestamped_transcriptions/example_transcri
 
 =================================================================
 
-# Corrected timestamped transcription cleaning up:
+## Corrected timestamped transcription cleaning up:
 
 ```bash
 python cli.py cleanup --input output/timestamped_transcriptions/example_transcribed_corrected.json
@@ -32,10 +32,10 @@ python cli.py cleanup --input output/timestamped_transcriptions/example_transcri
 
 =================================================================
 
-# Transcription segments optimization:
+## Transcription segments optimization:
 
 ```bash
-python cli.py optimize --input output/timestamped_transcriptions/input_transcribed_corrected_cleaned.json
+python cli.py optimize --input output/timestamped_transcriptions/example_transcribed_corrected_cleaned.json
 ```
 
 =================================================================
