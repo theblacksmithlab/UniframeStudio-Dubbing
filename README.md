@@ -33,6 +33,8 @@ Click on the thumbnails above to watch the videos, or use these direct links:
 - [Original Video (Russian)](https://youtu.be/d341QKt-Szs)
 - [Processed Video (English dub)](https://youtu.be/dg0AJE4k8Bg)
 
+### Demo videos were kindly provided by [Web3 Academy](https://edu.web3academy.pro/home) Educational platform
+
 ---
 
 ## 🔄 Workflow
