@@ -60,7 +60,7 @@ _Coming soon..._
 
 ---
 
-# API Usage
+## API Usage
 The system provides a REST API for easy integration:
 
 _Coming soon..._
