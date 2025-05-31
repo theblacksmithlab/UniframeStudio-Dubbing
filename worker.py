@@ -198,7 +198,7 @@ def main():
             tts_voice=params["tts_voice"],
             elevenlabs_api_key=params["api_keys"].get("elevenlabs"),
             openai_api_key=params["api_keys"].get("openai"),
-            is_premium=params.get("user_is_premium", False),
+            is_premium=params.get("is_premium", False),
         )
 
         if result["status"] == "success":
@@ -209,7 +209,7 @@ def main():
             try:
                 logger.info(f"Uploading results to S3 for job: {job_id}")
                 result_urls = upload_results_to_s3(
-                    job_id, params.get("user_is_premium", False)
+                    job_id, params.get("is_premium", False)
                 )
 
                 update_job_status(job_id=job_id, step=16, result_urls=result_urls)

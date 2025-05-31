@@ -24,7 +24,7 @@ class ProcessVideoRequest(BaseModel):
     tts_provider: str
     tts_voice: str
     source_language: Optional[str] = None
-    user_is_premium: bool
+    is_premium: bool
     api_keys: Dict[str, str]
 
 
@@ -126,6 +126,9 @@ async def start_video_processing(request: ProcessVideoRequest):
             status_code=400,
             detail="ElevenLabs API key is required for ElevenLabs TTS provider",
         )
+
+    if not request.is_premium:
+        raise HTTPException(status_code=400, detail="User's subscription tier is required")
 
     os.makedirs("jobs", exist_ok=True)
     os.makedirs(f"jobs/{request.job_id}", exist_ok=True)
