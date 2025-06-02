@@ -129,8 +129,8 @@ async def start_video_processing(request: ProcessVideoRequest):
             detail="ElevenLabs API key is required for ElevenLabs TTS provider",
         )
 
-    if not request.is_premium:
-        raise HTTPException(status_code=400, detail="User's subscription tier is required")
+    if not hasattr(request, 'is_premium'):
+        raise HTTPException(status_code=400, detail="User's subscription tier field is required")
 
     os.makedirs("jobs", exist_ok=True)
     os.makedirs(f"jobs/{request.job_id}", exist_ok=True)
