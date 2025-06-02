@@ -3,7 +3,7 @@ from datetime import datetime
 import subprocess
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import uvicorn
 import os
 import json
@@ -35,9 +35,10 @@ class JobStatus(BaseModel):
     completed_at: Optional[str] = None
     step: Optional[int] = None
     total_steps: Optional[int] = None
-    description: Optional[str] = None
+    step_description: Optional[str] = None
     progress_percentage: Optional[int] = None
     error_message: Optional[str] = None
+    processing_steps: Optional[List[str]] = None
 
 
 class JobResult(BaseModel):
@@ -60,9 +61,10 @@ async def get_job_status(job_id: str):
             completed_at=status_data.get("completed_at"),
             step=status_data.get("step"),
             total_steps=status_data.get("total_steps"),
-            description=status_data.get("description"),
+            step_description=status_data.get("step_description"),
             progress_percentage=status_data.get("progress_percentage"),
             error_message=status_data.get("error_message"),
+            processing_steps=status_data.get("processing_steps"),
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -151,11 +153,22 @@ async def start_video_processing(request: ProcessVideoRequest):
         completed_at=job_status.get("completed_at"),
         step=job_status["step"],
         total_steps=job_status["total_steps"],
-        description=job_status["description"],
+        step_description=job_status["description"],
         progress_percentage=job_status["progress_percentage"],
         error_message=job_status.get("error_message"),
+        processing_steps=job_status.get("processing_steps"),
     )
 
+
+@app.get("/health")
+async def health_check():
+    logger.debug(f"Checking service's health...")
+
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "service": "uniframe-dubbing-service"
+    }
 
 if __name__ == "__main__":
     load_dotenv()

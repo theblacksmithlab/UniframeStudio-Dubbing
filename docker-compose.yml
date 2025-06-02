@@ -1,4 +1,6 @@
+
 version: '3.8'
+
 services:
   python-service:
     build: .
@@ -13,9 +15,11 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - S3_BUCKET=blacksmith-lab
       - AWS_REGION=eu-north-1
-    networks:
-      - uniframe-network
-
-networks:
-  uniframe-network:
-    external: true
+    restart: always
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
