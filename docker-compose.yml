@@ -15,10 +15,10 @@ services:
       - S3_BUCKET=blacksmith-lab
       - AWS_REGION=eu-north-1
     restart: always
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]
