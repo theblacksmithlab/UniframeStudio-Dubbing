@@ -270,6 +270,7 @@ class VideoProcessor:
                 logger.info(f"The original video already has the required frame rate ({self.target_fps} FPS)")
                 cmd = [
                           'ffmpeg',
+                          '-y',
                           '-i', input_path,
                           '-an',
                           '-c:v', encoder,
@@ -283,6 +284,7 @@ class VideoProcessor:
                 logger.info(f"Convert video from {self.input_fps} FPS to {self.target_fps} FPS")
                 cmd = [
                           'ffmpeg',
+                          '-y',
                           '-i', input_path,
                           '-an',
                           '-c:v', encoder,
