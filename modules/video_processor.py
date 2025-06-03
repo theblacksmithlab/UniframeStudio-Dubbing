@@ -61,19 +61,6 @@ class VideoProcessor:
 
     def _run_command(self, cmd, **kwargs):
         """Safely execute external command with minimal logging"""
-
-        if '-i' in cmd:
-            input_file = cmd[cmd.index('-i') + 1]
-            print(f"[DEBUG] Input file: {input_file}")
-            print(f"[DEBUG] Input exists: {os.path.exists(input_file)}")
-            if os.path.exists(input_file):
-                print(f"[DEBUG] Input size: {os.path.getsize(input_file)} bytes")
-
-        output_file = cmd[-1]
-        output_dir = os.path.dirname(output_file)
-        print(f"[DEBUG] Output dir: {output_dir}")
-        print(f"[DEBUG] Output dir exists: {os.path.exists(output_dir)}")
-
         try:
             if 'capture_output' not in kwargs:
                 kwargs['capture_output'] = True
@@ -87,8 +74,10 @@ class VideoProcessor:
 
             if result.returncode != 0:
                 logger.error(f"Command failed with code {result.returncode}")
-                if hasattr(result, 'stderr') and result.stderr and len(result.stderr) < 200:
+                if hasattr(result, 'stderr') and result.stderr:
                     logger.error(f"Error: {result.stderr.strip()}")
+                if hasattr(result, 'stdout') and result.stdout:
+                    logger.info(f"STDOUT: {result.stdout.strip()}")
                 raise subprocess.CalledProcessError(result.returncode, cmd)
 
             return result
