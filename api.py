@@ -153,7 +153,7 @@ async def start_video_processing(request: ProcessVideoRequest):
         completed_at=job_status.get("completed_at"),
         step=job_status["step"],
         total_steps=job_status["total_steps"],
-        step_description=job_status["description"],
+        step_description=job_status["step_description"],
         progress_percentage=job_status["progress_percentage"],
         error_message=job_status.get("error_message"),
         processing_steps=job_status.get("processing_steps"),
