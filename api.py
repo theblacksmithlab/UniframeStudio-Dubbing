@@ -114,7 +114,7 @@ async def start_video_processing(request: ProcessVideoRequest):
         raise HTTPException(status_code=400, detail="TTS voice is required")
 
     if not request.api_keys:
-        raise HTTPException(status_code=400, detail="API-keys is required")
+        raise HTTPException(status_code=400, detail="Third-party services API-keys is required")
 
     if "openai" not in request.api_keys or not request.api_keys.get("openai"):
         raise HTTPException(
@@ -130,7 +130,7 @@ async def start_video_processing(request: ProcessVideoRequest):
         )
 
     if not hasattr(request, 'is_premium'):
-        raise HTTPException(status_code=400, detail="User's subscription tier field is required")
+        raise HTTPException(status_code=400, detail="User's subscription tier info is required")
 
     os.makedirs("jobs", exist_ok=True)
     os.makedirs(f"jobs/{request.job_id}", exist_ok=True)
@@ -162,7 +162,7 @@ async def start_video_processing(request: ProcessVideoRequest):
 
 @app.get("/health")
 async def health_check():
-    logger.debug(f"Checking service's health...")
+    logger.debug(f"Checking dubbing service's health...")
 
     return {
         "status": "healthy",

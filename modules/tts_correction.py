@@ -3,7 +3,7 @@ import json
 import subprocess
 import openai
 from pydub import AudioSegment
-from modules.tts import make_api_request_with_retry
+from modules.tts import make_api_request_with_retry, generate_openai_tts_with_retry
 from modules.tts import match_target_amplitude
 from utils.logger_config import setup_logger
 
@@ -86,14 +86,7 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
         if dealer.lower() == "openai":
             client = openai.OpenAI(api_key=openai_api_key)
 
-            response = client.audio.speech.create(
-                model="tts-1",
-                voice=voice,
-                input=text
-            )
-
-            with open(temp_file, "wb") as f:
-                f.write(response.content)
+            generate_openai_tts_with_retry(client, text, voice, temp_file)
 
         elif dealer.lower() == "elevenlabs":
             request_data = {
@@ -174,6 +167,8 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
         with open(translation_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
+        return output_audio_file
+
     except Exception as e:
         logger.error(f"Error processing segment {segment_id}: {e}")
         import traceback
@@ -182,5 +177,4 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
     finally:
         if os.path.exists(temp_file):
             os.remove(temp_file)
-
-    return output_audio_file
+            logger.debug(f"Temporary file {temp_file} removed successfully")

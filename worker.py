@@ -139,7 +139,7 @@ def cleanup_job_files(job_id):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Worker for processing video jobs")
+    parser = argparse.ArgumentParser(description="Worker for video processing job")
     parser.add_argument("--job_id", required=True, help="Job ID to process")
     args = parser.parse_args()
 
