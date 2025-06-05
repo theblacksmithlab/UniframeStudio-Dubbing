@@ -148,6 +148,8 @@ def main():
 
     logger.info(f"Starting worker for job: {job_id}")
 
+    load_dotenv()
+
     if not os.path.exists(job_dir):
         logger.error(f"Job directory not found: {job_dir}")
         return 1

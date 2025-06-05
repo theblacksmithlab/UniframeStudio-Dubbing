@@ -90,6 +90,7 @@ async def get_job_result(job_id: str):
 
 @app.post("/process-video", response_model=JobStatus)
 async def start_video_processing(request: ProcessVideoRequest):
+    load_dotenv()
     logger.info(f"Got job processing request | Job id: {request.job_id}")
 
     if not request.job_id:
