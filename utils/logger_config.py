@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from logging.handlers import RotatingFileHandler
 
 
@@ -15,7 +16,7 @@ def setup_logger(name=None, log_file=None, level=logging.INFO):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    console_handler = logging.StreamHandler()
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
