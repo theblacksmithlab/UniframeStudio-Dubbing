@@ -12,33 +12,41 @@ from utils.logger_config import setup_logger
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
-def run_command(command):
-    log_safe_command = command.copy()
-
-    for i, part in enumerate(log_safe_command):
-        if "--openai_api_key" in part and i < len(log_safe_command) - 1:
-            log_safe_command[i + 1] = "sk-***************"
-        elif "--elevenlabs_api_key" in part and i < len(log_safe_command) - 1:
-            log_safe_command[i + 1] = "***************"
-        elif part.startswith("--openai_api_key="):
-            log_safe_command[i] = "--openai_api_key=sk-***************"
-        elif part.startswith("--elevenlabs_api_key="):
-            log_safe_command[i] = "--elevenlabs_api_key=***************"
-
-    logger.info(f"Executing: {' '.join(command)}")
+def run_command(command, **kwargs):
     try:
-        subprocess.run(command, check=True)
+        if 'capture_output' not in kwargs:
+            kwargs['capture_output'] = True
+
+        command_str = ' '.join(map(str, command))
+        if len(command_str) > 100:
+            command_str = command_str[:97] + "..."
+        logger.info(f"Executing: {command_str}")
+
+        result = subprocess.run(command, text=True, **kwargs)
+
+        if result.returncode != 0:
+            logger.error(f"Command failed with code {result.returncode}")
+            if hasattr(result, 'stderr') and result.stderr:
+                logger.error(f"Error: {result.stderr.strip()}")
+            if hasattr(result, 'stdout') and result.stdout:
+                logger.info(f"STDOUT: {result.stdout.strip()}")
+            return False
+
         return True
-    except subprocess.CalledProcessError as e:
-        error_str = str(e)
 
-        if "openai_api_key" in error_str:
-            error_str = error_str.replace(error_str.split("openai_api_key")[1].split(" ")[0], "=sk-***************")
-        if "elevenlabs_api_key" in error_str:
-            error_str = error_str.replace(error_str.split("elevenlabs_api_key")[1].split(" ")[0], "=***************")
-
-        logger.error(f"Command execution error: {error_str}")
+    except Exception as e:
+        logger.error(f"Error executing command: {str(e)}")
         return False
+
+# def run_command(command):
+#     logger.info(f"Executing: {' '.join(command)}")
+#
+#     try:
+#         subprocess.run(command, check=True)
+#         return True
+#     except subprocess.CalledProcessError as e:
+#         logger.error(f"Command execution error: {e}")
+#         return False
 
 
 def add_intro_outro_audio(input_audio, output_audio, resources_dir):

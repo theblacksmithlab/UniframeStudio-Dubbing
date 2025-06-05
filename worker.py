@@ -190,14 +190,35 @@ def main():
 
         logger.info(f"Starting job processing for job: {job_id} ...")
 
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        elevenlabs_api_key = os.getenv('ELEVENLABS_API_KEY')
+
+        if not openai_api_key:
+            logger.error("OpenAI API key not found in environment variables")
+            update_job_status(
+                job_id=job_id,
+                status=JOB_STATUS_FAILED,
+                error_message="OpenAI API key not configured",
+            )
+            return 1
+
+        if params["tts_provider"] == "elevenlabs" and not elevenlabs_api_key:
+            logger.error("ElevenLabs API key not found in environment variables")
+            update_job_status(
+                job_id=job_id,
+                status=JOB_STATUS_FAILED,
+                error_message="ElevenLabs API key not configured",
+            )
+            return 1
+
         result = process_job(
             job_id=job_id,
             source_language=params.get("source_language"),
             target_language=params["target_language"],
             tts_provider=params["tts_provider"],
             tts_voice=params["tts_voice"],
-            elevenlabs_api_key=params["api_keys"].get("elevenlabs"),
-            openai_api_key=params["api_keys"].get("openai"),
+            elevenlabs_api_key=elevenlabs_api_key,
+            openai_api_key=openai_api_key,
             is_premium=params.get("is_premium", False),
         )
 

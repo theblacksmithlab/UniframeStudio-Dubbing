@@ -60,7 +60,6 @@ class VideoProcessor:
         self.converted_video_path = self.temp_dir / "converted_input.mp4"
 
     def _run_command(self, cmd, **kwargs):
-        """Safely execute external command with minimal logging"""
         try:
             if 'capture_output' not in kwargs:
                 kwargs['capture_output'] = True
@@ -212,7 +211,6 @@ class VideoProcessor:
         return frames * frame_duration
 
     def convert_to_target_fps(self):
-        """Convert source video to target FPS without sound"""
         try:
             input_path = str(self.input_video_path)
             output_path = str(self.converted_video_path)
@@ -246,25 +244,24 @@ class VideoProcessor:
                 encoder = 'h264_nvenc'
                 pixel_format = 'yuv420p'
                 quality_params = [
-                    '-b:v', '100M',  # Very high bitrate
-                    '-bufsize', '100M',  # Large buffer
-                    '-rc', 'vbr',  # Changed from vbr_hq to vbr (supported mode)
-                    '-rc-lookahead', '32',  # Maximum lookahead window
-                    '-spatial_aq', '1',  # Spatial adaptive quantization
-                    '-temporal_aq', '1',  # Temporal adaptive quantization
-                    '-aq-strength', '15',  # Maximum adaptive quantization strength
-                    '-nonref_p', '0',  # All P-frames are reference frames
-                    # Completely removed weighted_pred and b_ref_mode
+                    '-b:v', '100M',
+                    '-bufsize', '100M',
+                    '-rc', 'vbr',
+                    '-rc-lookahead', '32',
+                    '-spatial_aq', '1',
+                    '-temporal_aq', '1',
+                    '-aq-strength', '15',
+                    '-nonref_p', '0',
                 ]
-                preset = 'p7'  # Highest quality NVENC preset
-                extra_params = ['-tune', 'hq']  # High quality tuning
+                preset = 'p7'
+                extra_params = ['-tune', 'hq']
             else:
                 logger.info("GPU not detected or not supported. Using CPU")
                 encoder = 'libx264'
                 pixel_format = 'yuv444p'
-                quality_params = ['-crf', '0']  # Lossless quality
-                preset = 'veryslow'  # Highest quality preset
-                extra_params = ['-tune', 'film']  # Film tuning for better quality
+                quality_params = ['-crf', '0']
+                preset = 'veryslow'
+                extra_params = ['-tune', 'film']
 
             if not self.needs_fps_conversion:
                 logger.info(f"The original video already has the required frame rate ({self.target_fps} FPS)")
@@ -321,7 +318,6 @@ class VideoProcessor:
             raise
 
     def extract_segments(self):
-        """Extract segments and gaps from video using GPU if available"""
         segments = self.data.get('segments', [])
         video_path = self.converted_video_path
 
@@ -335,24 +331,23 @@ class VideoProcessor:
             encoder = 'h264_nvenc'
             pixel_format = 'yuv420p'
             quality_params = [
-                '-b:v', '100M',  # Very high bitrate
-                '-bufsize', '100M',  # Large buffer
-                '-rc', 'vbr',  # Changed from vbr_hq to vbr
-                '-rc-lookahead', '32',  # Maximum lookahead window
-                '-spatial_aq', '1',  # Spatial adaptive quantization
-                '-temporal_aq', '1',  # Temporal adaptive quantization
-                '-aq-strength', '15',  # Maximum adaptive quantization strength
-                '-nonref_p', '0'  # All P-frames are reference frames
-                # Removed weighted_pred parameter
+                '-b:v', '100M',
+                '-bufsize', '100M',
+                '-rc', 'vbr',
+                '-rc-lookahead', '32',
+                '-spatial_aq', '1',
+                '-temporal_aq', '1',
+                '-aq-strength', '15',
+                '-nonref_p', '0'
             ]
-            preset = 'p7'  # Highest quality NVENC preset
-            extra_params = ['-tune', 'hq']  # High quality tuning
+            preset = 'p7'
+            extra_params = ['-tune', 'hq']
         else:
             logger.warning("GPU not detected or not supported. Using CPU")
             encoder = 'libx264'
             pixel_format = 'yuv444p'
-            quality_params = ['-crf', '0']  # Lossless quality
-            preset = 'veryslow'  # Highest quality preset
+            quality_params = ['-crf', '0']
+            preset = 'veryslow'
             extra_params = ['-tune', 'film']
 
         if segments and segments[0]['start'] > 0.01:
@@ -395,6 +390,7 @@ class VideoProcessor:
 
             except Exception as e:
                 logger.warning(f"Error while extracting initial gap: {e}")
+
                 fallback_gap_cmd = [
                     'ffmpeg',
                     '-i', str(video_path),
@@ -406,6 +402,7 @@ class VideoProcessor:
                     '-an',
                     str(initial_gap_path)
                 ]
+
                 self._run_command(fallback_gap_cmd)
 
 
@@ -490,6 +487,7 @@ class VideoProcessor:
 
                     except Exception as e:
                         logger.warning(f"Error while extracting gap {i}-{i + 1}: {e}")
+
                         fallback_gap_cmd = [
                             'ffmpeg',
                             '-i', video_path,
@@ -501,6 +499,7 @@ class VideoProcessor:
                             '-an',
                             str(gap_path)
                         ]
+
                         self._run_command(fallback_gap_cmd)
 
         if segments and segments[-1]['end'] < total_duration - 0.01:
@@ -543,6 +542,7 @@ class VideoProcessor:
 
             except Exception as e:
                 logger.warning(f"Error while extracting final gap: {e}")
+
                 fallback_gap_cmd = [
                     'ffmpeg',
                     '-i', str(video_path),
@@ -554,10 +554,10 @@ class VideoProcessor:
                     '-an',
                     str(final_gap_path)
                 ]
+
                 self._run_command(fallback_gap_cmd)
 
     def process_segments(self):
-        """Processing all segments with changes in their duration"""
         segments = self.data.get('segments', [])
 
         has_gpu = self._check_gpu_availability()
@@ -592,14 +592,13 @@ class VideoProcessor:
                 output_path = self.processed_segments_dir / f"processed_segment_{i:04d}.mp4"
 
                 if not os.path.exists(input_path):
-                    logger.warning(f"Segment file not found: {input_path}")
+                    logger.error(f"Segment file not found: {input_path}")
                     continue
 
                 original_duration = self._get_video_duration(input_path)
                 target_duration = segment['tts_duration']
                 adjusted_target_duration = self._adjust_duration_for_fps(target_duration)
 
-                # Check for negative or zero duration
                 if original_duration <= 0:
                     logger.warning(f"Original duration of segment {i} is equal to or less than zero: {original_duration}")
                     continue
@@ -644,7 +643,7 @@ class VideoProcessor:
                         if has_gpu:
                             logger.warning(f"Error processing segment {i} with GPU: {e}")
                             logger.info(f"Trying to process segment {i} with CPU...")
-                            # CPU fallback
+
                             cmd = [
                                 'ffmpeg',
                                 '-i', str(input_path),
@@ -678,7 +677,6 @@ class VideoProcessor:
                 logger.error(f"Error processing segment {i}: {e}")
 
     def combine_final_video_reliable(self):
-        """Direct video combining using filter_complex for maximum quality"""
         segments = self.data.get('segments', [])
 
         main_width, main_height = self._get_video_resolution(self.converted_video_path)
@@ -695,7 +693,7 @@ class VideoProcessor:
             if os.path.exists(segment_path):
                 base_input_files.append((str(segment_path), f"segment_{i:04d}"))
             else:
-                logger.warning(f"Processed segment not found: {segment_path}")
+                logger.error(f"Processed segment not found: {segment_path}")
 
             gap_path = self.gaps_dir / f"gap_{i:04d}_{i + 1:04d}.mp4"
             if gap_path.exists():
@@ -706,8 +704,9 @@ class VideoProcessor:
             base_input_files.append((str(final_gap_path), f"gap_{len(segments) - 1:04d}_end"))
 
         selected_intro_path = None
+
         if not self.is_premium:
-            logger.info("Finding intro/outro for regular version...")
+            logger.info("Finding intro/outro for common version...")
             resources_dir = self.resources_dir
 
             intro_4k_path = os.path.join(resources_dir, "intro_outro_4k.mp4")
@@ -745,7 +744,7 @@ class VideoProcessor:
 
         has_gpu = self._check_gpu_availability()
 
-        logger.info(f"=== Creating Premium Version (no intro/outro) ===")
+        logger.info("Creating Premium version...")
         temp_output_premium = self.temp_dir / "temp_output_premium.mp4"
 
         premium_input_files = base_input_files.copy()
@@ -762,7 +761,7 @@ class VideoProcessor:
             ffmpeg_inputs_premium.extend(['-i', file_path])
 
         if has_gpu:
-            logger.info("Using NVIDIA GPU for premium video...")
+            logger.info("Using NVIDIA GPU for creating premium video...")
             cmd_premium = [
                 'ffmpeg',
                 *ffmpeg_inputs_premium,
@@ -787,7 +786,7 @@ class VideoProcessor:
                 str(temp_output_premium)
             ]
         else:
-            logger.info("Using CPU for premium video...")
+            logger.warning("Using CPU for creating premium video...")
             cmd_premium = [
                 'ffmpeg',
                 *ffmpeg_inputs_premium,
@@ -805,7 +804,7 @@ class VideoProcessor:
         try:
             self._run_command(cmd_premium)
             if not os.path.exists(temp_output_premium) and has_gpu:
-                logger.warning("Error using GPU for premium. Trying CPU fallback...")
+                logger.warning("Error using GPU for creating premium version. Trying CPU fallback...")
                 cpu_cmd_premium = [
                     'ffmpeg',
                     *ffmpeg_inputs_premium,
@@ -823,7 +822,7 @@ class VideoProcessor:
         except Exception as e:
             logger.warning(f"Error creating premium video: {e}")
             if has_gpu:
-                logger.info("Trying CPU fallback for premium...")
+                logger.warning("Trying CPU fallback for creating premium version...")
                 cpu_cmd_premium = [
                     'ffmpeg',
                     *ffmpeg_inputs_premium,
@@ -849,7 +848,7 @@ class VideoProcessor:
             return False
 
         if not self.is_premium and selected_intro_path:
-            logger.info(f"=== Creating Regular Version (with intro/outro) ===")
+            logger.info("Creating Common version")
             temp_output_regular = self.temp_dir / "temp_output_regular.mp4"
 
             regular_input_files = []
@@ -857,7 +856,7 @@ class VideoProcessor:
             regular_input_files.extend(base_input_files)
             regular_input_files.append((str(selected_intro_path), "outro"))
 
-            logger.info(f"Regular version files to merge: {len(regular_input_files)}")
+            logger.info(f"Common version files to merge: {len(regular_input_files)}")
 
             filter_parts_regular = []
             for i in range(len(regular_input_files)):
@@ -870,7 +869,7 @@ class VideoProcessor:
                 ffmpeg_inputs_regular.extend(['-i', file_path])
 
             if has_gpu:
-                logger.info("Using NVIDIA GPU for regular video...")
+                logger.info("Using NVIDIA GPU for creating common version...")
                 cmd_regular = [
                     'ffmpeg',
                     *ffmpeg_inputs_regular,
@@ -895,7 +894,7 @@ class VideoProcessor:
                     str(temp_output_regular)
                 ]
             else:
-                logger.info("Using CPU for regular video...")
+                logger.warning("Using CPU for creating common version...")
                 cmd_regular = [
                     'ffmpeg',
                     *ffmpeg_inputs_regular,
@@ -913,7 +912,7 @@ class VideoProcessor:
             try:
                 self._run_command(cmd_regular)
                 if not os.path.exists(temp_output_regular) and has_gpu:
-                    logger.warning("Error using GPU for regular. Trying CPU fallback...")
+                    logger.warning("Error using GPU for creating common version. Trying CPU fallback...")
                     cpu_cmd_regular = [
                         'ffmpeg',
                         *ffmpeg_inputs_regular,
@@ -929,9 +928,9 @@ class VideoProcessor:
                     ]
                     self._run_command(cpu_cmd_regular)
             except Exception as e:
-                logger.warning(f"Error creating regular video: {e}")
+                logger.warning(f"Error creating common version: {e}")
                 if has_gpu:
-                    logger.info("Trying CPU fallback for regular...")
+                    logger.info("Trying CPU fallback for creating common version...")
                     cpu_cmd_regular = [
                         'ffmpeg',
                         *ffmpeg_inputs_regular,
@@ -948,8 +947,8 @@ class VideoProcessor:
                     self._run_command(cpu_cmd_regular)
 
             if os.path.exists(temp_output_regular):
-                regular_duration = self._get_video_duration(temp_output_regular)
-                logger.info(f"Regular video created! Duration: {regular_duration:.4f} sec")
+                common_version_duration = self._get_video_duration(temp_output_regular)
+                logger.info(f"Common video created! Duration: {common_version_duration:.4f} sec")
                 shutil.copy(temp_output_regular, self.output_video_path)
                 logger.info(f"Regular video saved to: {self.output_video_path}")
             else:
@@ -965,17 +964,16 @@ class VideoProcessor:
         regular_exists = os.path.exists(self.output_video_path) if not self.is_premium else True
 
         if premium_exists and regular_exists:
-            logger.info(f"=== SUCCESS ===")
+            logger.info(f"Final video successfully created!")
             logger.info(f"Premium video: {self.output_video_path_premium}")
             if not self.is_premium:
-                logger.info(f"Regular video: {self.output_video_path}")
+                logger.info(f"Common video: {self.output_video_path}")
             return True
         else:
             logger.error("Error: One or both videos failed to create!")
             return False
 
     def cleanup(self):
-        """Deleting temp files"""
         try:
             shutil.rmtree(self.temp_dir)
             logger.info(f"Temporary files have been deleted: {self.temp_dir}")
@@ -983,7 +981,6 @@ class VideoProcessor:
             logger.warning(f"Error deleting temporary files: {e}")
 
     def process(self):
-        """Executing the complete processing sequence"""
         try:
             logger.info("VideoProcessor | Step 1/4. Convert video to target FPS...")
             self.convert_to_target_fps()

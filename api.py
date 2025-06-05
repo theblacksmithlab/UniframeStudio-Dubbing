@@ -25,7 +25,6 @@ class ProcessVideoRequest(BaseModel):
     tts_voice: str
     source_language: Optional[str] = None
     is_premium: bool
-    api_keys: Dict[str, str]
 
 
 class JobStatus(BaseModel):
@@ -113,24 +112,23 @@ async def start_video_processing(request: ProcessVideoRequest):
     if not request.tts_voice:
         raise HTTPException(status_code=400, detail="TTS voice is required")
 
-    if not request.api_keys:
-        raise HTTPException(status_code=400, detail="Third-party services API-keys is required")
-
-    if "openai" not in request.api_keys or not request.api_keys.get("openai"):
-        raise HTTPException(
-            status_code=400, detail="OpenAI API key is required for all operations"
-        )
-
-    if request.tts_provider == "elevenlabs" and (
-        "elevenlabs" not in request.api_keys or not request.api_keys.get("elevenlabs")
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="ElevenLabs API key is required for ElevenLabs TTS provider",
-        )
-
     if not hasattr(request, 'is_premium'):
         raise HTTPException(status_code=400, detail="User's subscription tier info is required")
+
+    openai_key = os.getenv('OPENAI_API_KEY')
+    if not openai_key:
+        raise HTTPException(
+            status_code=500,
+            detail="OpenAI API key not configured in internal service's environment"
+        )
+
+    if request.tts_provider == "elevenlabs":
+        elevenlabs_key = os.getenv('ELEVENLABS_API_KEY')
+        if not elevenlabs_key:
+            raise HTTPException(
+                status_code=500,
+                detail="ElevenLabs API key not configured in internal service's environment"
+            )
 
     os.makedirs("jobs", exist_ok=True)
     os.makedirs(f"jobs/{request.job_id}", exist_ok=True)
