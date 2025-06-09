@@ -30,9 +30,11 @@ def load_whisper_model(model_size: str = "large", device: str = "auto"):
 
 
 def transcribe_local(file_path: str, source_language: Optional[str] = None,
-                     model_size: str = "medium", device: str = "auto") -> Dict[str, Any]:
+                     model_size: str = "large", device: str = "cuda") -> Dict[str, Any]:
     try:
-        model = load_whisper_model(model_size, device)
+        logger.info(f"Downloading Whisper model: {model_size}...")
+        model = load_whisper_model("large", "cuda")
+        logger.info(f"Whisper model: {model_size} is ready!")
 
         transcribe_params = {
             "word_timestamps": True,
@@ -84,8 +86,6 @@ def transcribe_local(file_path: str, source_language: Optional[str] = None,
 
 
 def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, output_file=None, openai_api_key=None):
-    load_whisper_model("medium", "cuda")
-
     def get_precise_audio_duration(file_path):
         cmd = [
             "ffprobe",
