@@ -2,16 +2,12 @@
 import argparse
 import os
 import sys
-
-# import dotenv
-
 from modules.adjust_timing import adjust_segments_timing
 from modules.cleaning_up_corrected_transcription import cleanup_transcript_segments
 from modules.transcribe_with_timestamps import transcribe_audio_with_timestamps
 from modules.transcription_correction import correct_transcript_segments
 from modules.translation import translate_transcribed_segments
 from modules.tts import generate_tts_for_segments, reassemble_audio_file
-# from modules.tts_correction import regenerate_segment
 from modules.video_processor import VideoProcessor
 from modules.video_to_audio_conversion import extract_audio
 from modules.optimized_segmentation import optimize_transcription_segments

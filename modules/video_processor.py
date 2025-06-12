@@ -59,29 +59,59 @@ class VideoProcessor:
         self.needs_fps_conversion = abs(self.input_fps - target_fps) > 0.01
         self.converted_video_path = self.temp_dir / "converted_input.mp4"
 
+    # def _run_command(self, cmd, **kwargs):
+    #     try:
+    #         if 'capture_output' not in kwargs:
+    #             kwargs['capture_output'] = True
+    #
+    #         command_str = ' '.join(map(str, cmd))
+    #         if len(command_str) > 100:
+    #             command_str = command_str[:97] + "..."
+    #         logger.info(f"Executing: {command_str}")
+    #
+    #         result = subprocess.run(cmd, text=True, **kwargs)
+    #
+    #         if result.returncode != 0:
+    #             logger.error(f"Command failed with code {result.returncode}")
+    #             if hasattr(result, 'stderr') and result.stderr:
+    #                 logger.error(f"Error: {result.stderr.strip()}")
+    #             if hasattr(result, 'stdout') and result.stdout:
+    #                 logger.info(f"STDOUT: {result.stdout.strip()}")
+    #             raise subprocess.CalledProcessError(result.returncode, cmd)
+    #
+    #         return result
+    #     except Exception as e:
+    #         logger.error(f"Error: {str(e)}")
+    #         raise
+
     def _run_command(self, cmd, **kwargs):
         try:
-            if 'capture_output' not in kwargs:
-                kwargs['capture_output'] = True
+            kwargs.setdefault('capture_output', True)
+            kwargs.setdefault('text', True)
 
             command_str = ' '.join(map(str, cmd))
-            if len(command_str) > 100:
-                command_str = command_str[:97] + "..."
-            logger.info(f"Executing: {command_str}")
+            logger.info(f"Executing: {command_str if len(command_str) < 100 else command_str[:97] + '...'}")
 
-            result = subprocess.run(cmd, text=True, **kwargs)
+            result = subprocess.run(cmd, **kwargs)
+
+            logger.info(f"Command exit code: {result.returncode}")
+
+            if result.stdout:
+                logger.info(f"[stdout]\n{result.stdout.strip()}")
+            if result.stderr:
+                logger.warning(f"[stderr]\n{result.stderr.strip()}")
 
             if result.returncode != 0:
-                logger.error(f"Command failed with code {result.returncode}")
-                if hasattr(result, 'stderr') and result.stderr:
-                    logger.error(f"Error: {result.stderr.strip()}")
-                if hasattr(result, 'stdout') and result.stdout:
-                    logger.info(f"STDOUT: {result.stdout.strip()}")
-                raise subprocess.CalledProcessError(result.returncode, cmd)
+                raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
 
             return result
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Command failed: {e}")
+            raise
+
         except Exception as e:
-            logger.error(f"Error: {str(e)}")
+            logger.exception(f"Unexpected error running command: {e}")
             raise
 
     def _check_gpu_availability(self):

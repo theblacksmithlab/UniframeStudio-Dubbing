@@ -12,7 +12,6 @@ from typing import Optional, Dict, Any
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
-
 _whisper_model = None
 _current_model_size = None
 
@@ -33,7 +32,7 @@ def transcribe_local(file_path: str, source_language: Optional[str] = None,
                      model_size: str = "large-v2", device: str = "cuda") -> Dict[str, Any]:
     try:
         logger.info(f"Downloading Whisper model: {model_size}...")
-        model = load_whisper_model("large", "cuda")
+        model = load_whisper_model("large-v2", device)
         logger.info(f"Whisper model: {model_size} is ready!")
 
         transcribe_params = {

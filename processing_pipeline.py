@@ -14,28 +14,28 @@ logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 def run_command(command, **kwargs):
     try:
-        if 'capture_output' not in kwargs:
-            kwargs['capture_output'] = True
+        kwargs.setdefault('capture_output', True)
+        kwargs.setdefault('text', True)
 
         command_str = ' '.join(map(str, command))
-        if len(command_str) > 100:
-            command_str = command_str[:97] + "..."
-        logger.info(f"Executing: {command_str}")
+        logger.info(f"Executing: {command_str if len(command_str) < 100 else command_str[:97] + '...'}")
 
-        result = subprocess.run(command, text=True, **kwargs)
+        result = subprocess.run(command, **kwargs)
+
+        logger.info(f"Command exit code: {result.returncode}")
+
+        if result.stdout:
+            logger.info(f"[stdout]\n{result.stdout.strip()}")
+        if result.stderr:
+            logger.warning(f"[stderr]\n{result.stderr.strip()}")
 
         if result.returncode != 0:
-            logger.error(f"Command failed with code {result.returncode}")
-            if hasattr(result, 'stderr') and result.stderr:
-                logger.error(f"Error: {result.stderr.strip()}")
-            if hasattr(result, 'stdout') and result.stdout:
-                logger.info(f"STDOUT: {result.stdout.strip()}")
             return False
 
         return True
 
     except Exception as e:
-        logger.error(f"Error executing command: {str(e)}")
+        logger.exception(f"Error executing command: {e}")
         return False
 
 # def run_command(command):

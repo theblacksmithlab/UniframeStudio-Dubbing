@@ -3,11 +3,10 @@ import json
 import fcntl
 from typing import Dict, Any, Optional
 from datetime import datetime
-import logging
+from utils.logger_config import setup_logger
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 JOB_TOTAL_STEPS = 16
 
