@@ -15,6 +15,8 @@ logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 _whisper_model = None
 _current_model_size = None
+_distil_pipeline = None
+_current_distil_model = None
 
 
 def load_whisper_model(model_size: str = "large", device: str = "auto"):
@@ -29,26 +31,55 @@ def load_whisper_model(model_size: str = "large", device: str = "auto"):
     return _whisper_model
 
 
-def transcribe_local(file_path: str, source_language: Optional[str] = None,
-                     model_size: str = "large", device: str = "cuda") -> Dict[str, Any]:
-    try:
-        logger.info(f"Downloading Whisper model: {model_size}...")
-        model = load_whisper_model("large", "cuda")
-        logger.info(f"Whisper model: {model_size} is ready!")
+def load_distil_model(model_name: str = "distil-whisper/distil-large-v3", device: str = "cuda"):
+    global _distil_pipeline, _current_distil_model
 
-        transcribe_params = {
-            "word_timestamps": True,
-            "temperature": 0.1,
-            "condition_on_previous_text": False,
-            "prompt": "Add proper punctuation."
+    if _distil_pipeline is None or _current_distil_model != model_name:
+        logger.info(f"Loading Distil-Whisper model: {model_name}")
+
+        device_map = device if torch.cuda.is_available() else "cpu"
+        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_name,
+            torch_dtype=torch_dtype,
+            low_cpu_mem_usage=True,
+            use_safetensors=True
+        )
+        model.to(device_map)
+
+        processor = AutoProcessor.from_pretrained(model_name)
+
+        _distil_pipeline = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            torch_dtype=torch_dtype,
+            device=device_map,
+            return_timestamps="word"
+        )
+
+        _current_distil_model = model_name
+        logger.info(f"Distil-Whisper model {model_name} loaded successfully")
+
+    return _distil_pipeline
+
+
+def transcribe_with_distil(file_path: str, source_language: Optional[str] = None,
+                           model_name: str = "distil-whisper/distil-large-v3",
+                           device: str = "cuda") -> Dict[str, Any]:
+    try:
+        logger.info(f"Starting Distil-Whisper transcription of {file_path}")
+
+        pipe = load_distil_model(model_name, device)
+
+        generate_kwargs = {
+            "language": source_language if source_language else "auto",
+            "task": "transcribe"
         }
 
-        logger.info(f"Starting transcription of {file_path}")
-
-        if source_language:
-            result = model.transcribe(file_path, language=source_language, **transcribe_params)
-        else:
-            result = model.transcribe(file_path, **transcribe_params)
+        result = pipe(file_path, generate_kwargs=generate_kwargs)
 
         formatted_result = {
             "text": result["text"],
@@ -56,34 +87,100 @@ def transcribe_local(file_path: str, source_language: Optional[str] = None,
             "words": []
         }
 
-        for i, segment in enumerate(result["segments"]):
-            seg_dict = {
-                "id": i,
-                "start": float(segment["start"]),
-                "end": float(segment["end"]),
-                "text": segment["text"]
-            }
-            formatted_result["segments"].append(seg_dict)
+        if "chunks" in result:
+            for i, chunk in enumerate(result["chunks"]):
+                seg_dict = {
+                    "id": i,
+                    "start": float(chunk["timestamp"][0] or 0),
+                    "end": float(chunk["timestamp"][1] or 0),
+                    "text": chunk["text"]
+                }
+                formatted_result["segments"].append(seg_dict)
 
-            if "words" in segment:
-                for word_info in segment["words"]:
-                    word_dict = {
-                        "word": word_info["word"],
-                        "start": float(word_info["start"]),
-                        "end": float(word_info["end"])
-                    }
-                    formatted_result["words"].append(word_dict)
+        if "words" in result:
+            for word_info in result["words"]:
+                word_dict = {
+                    "word": word_info["word"],
+                    "start": float(word_info["start"] or 0),
+                    "end": float(word_info["end"] or 0)
+                }
+                formatted_result["words"].append(word_dict)
 
-        if not formatted_result.get("text") and not formatted_result.get("segments"):
-            raise ValueError(f"Empty transcription result for {file_path}")
-
-        logger.info(f"Transcription completed for {file_path}. Text length: {len(formatted_result['text'])}")
-
+        logger.info(
+            f"Distil-Whisper transcription completed for {file_path}. Text length: {len(formatted_result['text'])}")
         return formatted_result
 
     except Exception as e:
-        logger.error(f"Error transcribing {file_path} with local Whisper: {str(e)}")
-        raise ValueError(f"Failed to transcribe audio with local Whisper: {str(e)}")
+        logger.error(f"Error transcribing {file_path} with Distil-Whisper: {str(e)}")
+        raise ValueError(f"Failed to transcribe audio with Distil-Whisper: {str(e)}")
+
+def transcribe_local(file_path: str, source_language: Optional[str] = None,
+                     model_size: str = "large", device: str = "cuda",
+                     use_distil: bool = False) -> Dict[str, Any]:
+
+    if use_distil:
+        distil_models = {
+            "large": "distil-whisper/distil-large-v3",
+            "large-v2": "distil-whisper/distil-large-v2",
+            "large-v3": "distil-whisper/distil-large-v3",
+            "medium": "distil-whisper/distil-medium.en"
+        }
+
+        distil_model = distil_models.get(model_size, "distil-whisper/distil-large-v3")
+        return transcribe_with_distil(file_path, source_language, distil_model, device)
+
+    else:
+        try:
+            logger.info(f"Downloading Whisper model: {model_size}...")
+            model = load_whisper_model(model_size, device)
+            logger.info(f"Whisper model: {model_size} is ready!")
+
+            transcribe_params = {
+                "word_timestamps": True,
+                "temperature": 0.1,
+                "condition_on_previous_text": False,
+            }
+
+            logger.info(f"Starting transcription of {file_path}")
+
+            if source_language:
+                result = model.transcribe(file_path, language=source_language, **transcribe_params)
+            else:
+                result = model.transcribe(file_path, **transcribe_params)
+
+            formatted_result = {
+                "text": result["text"],
+                "segments": [],
+                "words": []
+            }
+
+            for i, segment in enumerate(result["segments"]):
+                seg_dict = {
+                    "id": i,
+                    "start": float(segment["start"]),
+                    "end": float(segment["end"]),
+                    "text": segment["text"]
+                }
+                formatted_result["segments"].append(seg_dict)
+
+                if "words" in segment:
+                    for word_info in segment["words"]:
+                        word_dict = {
+                            "word": word_info["word"],
+                            "start": float(word_info["start"]),
+                            "end": float(word_info["end"])
+                        }
+                        formatted_result["words"].append(word_dict)
+
+            if not formatted_result.get("text") and not formatted_result.get("segments"):
+                raise ValueError(f"Empty transcription result for {file_path}")
+
+            logger.info(f"Transcription completed for {file_path}. Text length: {len(formatted_result['text'])}")
+            return formatted_result
+
+        except Exception as e:
+            logger.error(f"Error transcribing {file_path} with local Whisper: {str(e)}")
+            raise ValueError(f"Failed to transcribe audio with local Whisper: {str(e)}")
 
 
 def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, output_file=None, openai_api_key=None):
