@@ -117,8 +117,8 @@ def transcribe_with_distil(file_path: str, source_language: Optional[str] = None
         raise ValueError(f"Failed to transcribe audio with Distil-Whisper: {str(e)}")
 
 def transcribe_local(file_path: str, source_language: Optional[str] = None,
-                     model_size: str = "large", device: str = "cuda",
-                     use_distil: bool = True) -> Dict[str, Any]:
+                     model_size: str = "large-v2", device: str = "cuda",
+                     use_distil: bool =  False) -> Dict[str, Any]:
 
     if use_distil:
         distil_models = {
