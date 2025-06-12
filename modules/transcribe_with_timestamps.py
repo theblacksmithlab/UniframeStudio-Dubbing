@@ -7,6 +7,8 @@ from utils.audio_utils import split_audio
 import openai
 from utils.logger_config import setup_logger
 import whisper
+import torch
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 from typing import Optional, Dict, Any
 
 
