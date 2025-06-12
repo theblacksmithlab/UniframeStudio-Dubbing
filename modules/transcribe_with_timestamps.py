@@ -40,6 +40,7 @@ def transcribe_local(file_path: str, source_language: Optional[str] = None,
             "word_timestamps": True,
             "temperature": 0.1,
             "condition_on_previous_text": False,
+            "prompt": "Add proper punctuation."
         }
 
         logger.info(f"Starting transcription of {file_path}")
