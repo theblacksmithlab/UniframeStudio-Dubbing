@@ -116,7 +116,7 @@ def transcribe_with_distil(file_path: str, source_language: Optional[str] = None
 
 def transcribe_local(file_path: str, source_language: Optional[str] = None,
                      model_size: str = "large", device: str = "cuda",
-                     use_distil: bool = False) -> Dict[str, Any]:
+                     use_distil: bool = True) -> Dict[str, Any]:
 
     if use_distil:
         distil_models = {
