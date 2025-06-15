@@ -11,7 +11,7 @@ logger = setup_logger(name=__name__, log_file="logs/app.log")
 JOB_TOTAL_STEPS = 16
 
 STEP_DESCRIPTIONS = {
-    1: "Initializing system components...",
+    1: "Initializing dubbing system components...",
     2: "Downloading video from S3...",
     3: "Extracting audio from video...",
     4: "Transcribing extracted audio...",
@@ -24,9 +24,9 @@ STEP_DESCRIPTIONS = {
     11: "Auto-correcting segment durations...",
     12: "Creating final audio files...",
     13: "Processing video with new audio...",
-    14: "Creating final videos with stereo audio...",
+    14: "Creating final video with stereo audio...",
     15: "Uploading results to S3...",
-    16: "Finalizing..."
+    16: "Finalizing dubbing job..."
 }
 
 JOB_STATUS_PROCESSING = "processing"
@@ -144,7 +144,7 @@ def finalize_job(job_id: str):
             completed_at=datetime.now().isoformat(),
             progress_percentage=100
         )
-        logger.info(f"Job {job_id} finalized successfully")
+        logger.info(f"Job: {job_id} finalized successfully")
         return True
     except Exception as e:
         logger.error(f"Error during job finalization: {e}")

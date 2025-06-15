@@ -144,7 +144,6 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     logger.info(f"{'=' * 50}")
     logger.info(f"Processing job: {job_id}")
-    logger.info(f"Video file: {video_path}")
     if source_language:
         logger.info(f"Source language: {source_language}")
     logger.info(f"Target language: {target_language}")
@@ -175,7 +174,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Audio file created: {audio_path}")
+    # logger.info(f"Audio file created: {audio_path}")
 
     # [Step 2]
     current_step = 4
@@ -208,7 +207,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Transcription file created: {transcription_path}")
+    # logger.info(f"Transcription file created: {transcription_path}")
 
     # [Step 3]
     current_step = 5
@@ -234,7 +233,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Corrected transcription file created: {corrected_path}")
+    # logger.info(f"Corrected transcription file created: {corrected_path}")
 
     # [Step 4]
     current_step = 6
@@ -260,7 +259,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Cleaned transcription file created: {cleaned_path}")
+    # logger.info(f"Cleaned transcription file created: {cleaned_path}")
 
     # [Step 5]
     current_step = 7
@@ -286,7 +285,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Optimized transcription file created: {optimized_path}")
+    # logger.info(f"Optimized transcription file created: {optimized_path}")
 
     # [Step 6]
     current_step = 8
@@ -315,7 +314,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Adjusted transcription file created: {adjusted_path}")
+    # logger.info(f"Adjusted transcription file created: {adjusted_path}")
 
     # [Step 7]
     current_step = 9
@@ -349,7 +348,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Segments translation file created: {translated_path}")
+    # logger.info(f"Segments translation file created: {translated_path}")
 
     # [Step 8]
     current_step = 10
@@ -417,8 +416,8 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         }
 
     logger.info(f"TTS generation completed!")
-    logger.info(f"Audio segments saved to: {audio_segments_dir}")
-    logger.info(f"Final audio saved to: {expected_audio_path}")
+    # logger.info(f"Audio segments saved to: {audio_segments_dir}")
+    # logger.info(f"Final audio saved to: {expected_audio_path}")
 
     # [Step 9]
     current_step = 11
@@ -452,6 +451,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     logger.info(f"Auto-correction completed!")
     logger.info(f"Final audio file: {final_audio_path}")
+
     if os.path.exists(final_stereo_path):
         logger.info(f"Final stereo file: {final_stereo_path}")
 
@@ -494,11 +494,11 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     logger.info(f"Audio processing completed!")
     logger.info(f"Clean audio: {final_audio_path}")
-    logger.info(f"Clean stereo: {final_stereo_path}")
+    logger.info(f"Clean stereo audio: {final_stereo_path}")
     if not is_premium:
         logger.info(f"Audio with ads: {final_audio_with_ads}")
         if os.path.exists(final_stereo_with_ads):
-            logger.info(f"Stereo with ads: {final_stereo_with_ads}")
+            logger.info(f"Stereo audio with ads: {final_stereo_with_ads}")
         else:
             logger.warning("Stereo audio with ads: not created")
 
@@ -740,7 +740,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     logger.info(f"{'=' * 50}")
     logger.info("=================================================================")
-    logger.info(f"COMPLETE VIDEO PROCESSING FINISHED SUCCESSFULLY!")
+    logger.info(f"JOB PROCESSING FINISHED SUCCESSFULLY!")
     logger.info(f"Job ID: {job_id}")
     logger.info(f"Original video: {video_path}")
     logger.info(f"Final video: {final_video_path_mute}")
