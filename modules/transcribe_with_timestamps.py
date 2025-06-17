@@ -139,7 +139,11 @@ def transcribe_audio_with_timestamps(
 
         # transcription_api = transcribe(chunk_path, source_language=source_language, openai_api_key=openai_api_key)
 
-        transcription = transcribe_local(chunk_path, source_language, transcription_keywords)
+        transcription = transcribe_local(
+            file_path=chunk_path,
+            source_language=source_language,
+            transcription_keywords=transcription_keywords
+        )
 
         logger.info(f"Chunk {i + 1}/{len(chunk_paths)} transcribed. Text: {transcription.get('text', '')[:50]}...")
         logger.info(f"Total number of segments: {len(transcription.get('segments', []))}")
