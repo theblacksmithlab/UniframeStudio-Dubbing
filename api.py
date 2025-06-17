@@ -25,6 +25,7 @@ class ProcessVideoRequest(BaseModel):
     tts_voice: str
     source_language: Optional[str] = None
     is_premium: bool
+    transcription_keywords: Optional[str] = None
 
 
 class JobStatus(BaseModel):

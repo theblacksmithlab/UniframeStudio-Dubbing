@@ -29,17 +29,25 @@ def load_whisper_model(model_size: str = "large-v2", device: str = "auto"):
 
 
 def transcribe_local(file_path: str, source_language: Optional[str] = None,
-                     model_size: str = "large-v2", device: str = "cuda") -> Dict[str, Any]:
+                     model_size: str = "large-v2", device: str = "cuda",
+                     transcription_keywords: Optional[str] = None) -> Dict[str, Any]:
     try:
         logger.info(f"Downloading Whisper model: {model_size}...")
         model = load_whisper_model("large-v2", device)
         logger.info(f"Whisper model: {model_size} is ready!")
 
+        base_prompt = "Add proper punctuation."
+        if transcription_keywords:
+            prompt = f"Keywords: {transcription_keywords}. {base_prompt}"
+            logger.info(f"Using keywords: {transcription_keywords}")
+        else:
+            prompt = base_prompt
+
         transcribe_params = {
             "word_timestamps": True,
             "temperature": 0.0,
             "condition_on_previous_text": False,
-            "prompt": "Add proper punctuation."
+            "prompt": prompt,
         }
 
         logger.info(f"Starting transcription of {file_path}")
@@ -85,7 +93,14 @@ def transcribe_local(file_path: str, source_language: Optional[str] = None,
         raise ValueError(f"Failed to transcribe audio with local Whisper: {str(e)}")
 
 
-def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, output_file=None, openai_api_key=None):
+def transcribe_audio_with_timestamps(
+        input_audio,
+        job_id,
+        source_language=None,
+        output_file=None,
+        openai_api_key=None,
+        transcription_keywords=None
+):
     def get_precise_audio_duration(file_path):
         cmd = [
             "ffprobe",
@@ -124,7 +139,7 @@ def transcribe_audio_with_timestamps(input_audio, job_id, source_language=None, 
 
         # transcription_api = transcribe(chunk_path, source_language=source_language, openai_api_key=openai_api_key)
 
-        transcription = transcribe_local(chunk_path, source_language)
+        transcription = transcribe_local(chunk_path, source_language, transcription_keywords)
 
         logger.info(f"Chunk {i + 1}/{len(chunk_paths)} transcribed. Text: {transcription.get('text', '')[:50]}...")
         logger.info(f"Total number of segments: {len(transcription.get('segments', []))}")

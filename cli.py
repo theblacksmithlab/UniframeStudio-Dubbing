@@ -52,6 +52,9 @@ def main():
     transcribe_parser.add_argument(
         "--openai_api_key", required=True, help="OpenAI API key"
     )
+    transcribe_parser.add_argument(
+        "--transcription_keywords", help="Providing keywords for proper transcription"
+    )
 
 
     # Segments correction command sub-parser
@@ -261,6 +264,7 @@ def main():
                 source_language=args.source_language,
                 output_file=args.output,
                 openai_api_key=args.openai_api_key,
+                transcription_keywords=args.transcription_keywords,
             )
 
             logger.info(

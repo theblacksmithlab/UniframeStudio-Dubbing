@@ -112,7 +112,7 @@ def combine_video_and_audio(video_path, audio_path, output_path):
 
 
 def process_job(job_id, source_language=None, target_language=None, tts_provider=None, tts_voice=None,
-                elevenlabs_api_key=None, openai_api_key=None, is_premium=False):
+                elevenlabs_api_key=None, openai_api_key=None, is_premium=False, transcription_keywords=None):
     job_dir = f"jobs/{job_id}"
     input_video_dir = f"{job_dir}/video_input"
     processing_jsons_dir = f"{job_dir}/timestamped_transcriptions"
@@ -190,6 +190,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     if source_language:
         transcribe_cmd.extend(["--source_language", source_language])
+
+    if transcription_keywords:
+        transcribe_cmd.extend(["--transcription_keywords", transcription_keywords])
 
     if not run_command(transcribe_cmd):
         return {
