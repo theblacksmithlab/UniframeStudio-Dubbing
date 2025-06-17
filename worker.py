@@ -221,7 +221,7 @@ def main():
             elevenlabs_api_key=elevenlabs_api_key,
             openai_api_key=openai_api_key,
             is_premium=params.get("is_premium", False),
-            transcription_keywords=params.get["transcription_keywords"],
+            transcription_keywords=params.get("transcription_keywords"),
         )
 
         if result["status"] == "success":
