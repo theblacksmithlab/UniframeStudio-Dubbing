@@ -38,16 +38,6 @@ def run_command(command, **kwargs):
         logger.exception(f"Error executing command: {e}")
         return False
 
-# def run_command(command):
-#     logger.info(f"Executing: {' '.join(command)}")
-#
-#     try:
-#         subprocess.run(command, check=True)
-#         return True
-#     except subprocess.CalledProcessError as e:
-#         logger.error(f"Command execution error: {e}")
-#         return False
-
 
 def add_intro_outro_audio(input_audio, output_audio, resources_dir):
     intro_outro_path = os.path.join(resources_dir, "intro_outro_audio.mp3")

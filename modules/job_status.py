@@ -12,7 +12,7 @@ JOB_TOTAL_STEPS = 16
 
 STEP_DESCRIPTIONS = {
     1: "Initializing dubbing system components...",
-    2: "Downloading video from S3...",
+    2: "Downloading video from S3 storage...",
     3: "Extracting audio from video...",
     4: "Transcribing extracted audio...",
     5: "Structuring transcription...",
@@ -25,7 +25,7 @@ STEP_DESCRIPTIONS = {
     12: "Creating final audio files...",
     13: "Processing video with new audio...",
     14: "Creating final video with stereo audio...",
-    15: "Uploading results to S3...",
+    15: "Uploading results to S3 storage...",
     16: "Finalizing dubbing job..."
 }
 

@@ -72,7 +72,7 @@ async def get_job_status(job_id: str):
 
 @app.get("/job/{job_id}/result", response_model=JobResult)
 async def get_job_result(job_id: str):
-    logger.info(f"Got job results request for job: {job_id}")
+    logger.info(f"Got result request for job: {job_id}")
     try:
         status_data = get_or_create_job_status(job_id)
 
@@ -92,7 +92,7 @@ async def get_job_result(job_id: str):
 @app.post("/process-video", response_model=JobStatus)
 async def start_video_processing(request: ProcessVideoRequest):
     load_dotenv()
-    logger.info(f"Got new job processing request | Job id: {request.job_id}")
+    logger.info(f"Got new dubbing job request: {request.job_id}")
 
     if not request.job_id:
         raise HTTPException(status_code=400, detail="Job_id is required")
@@ -162,7 +162,7 @@ async def start_video_processing(request: ProcessVideoRequest):
 
 @app.get("/health")
 async def health_check():
-    logger.debug(f"Checking dubbing service's health...")
+    logger.debug("Got health check request...")
 
     return {
         "status": "healthy",
