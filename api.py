@@ -3,7 +3,7 @@ from datetime import datetime
 import subprocess
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import uvicorn
 import os
 import json
@@ -24,8 +24,8 @@ class ProcessVideoRequest(BaseModel):
     tts_provider: str
     tts_voice: str
     source_language: Optional[str] = None
-    user_is_premium: bool
-    api_keys: Dict[str, str]
+    is_premium: bool
+    transcription_keywords: Optional[str] = None
 
 
 class JobStatus(BaseModel):
@@ -35,9 +35,10 @@ class JobStatus(BaseModel):
     completed_at: Optional[str] = None
     step: Optional[int] = None
     total_steps: Optional[int] = None
-    description: Optional[str] = None
+    step_description: Optional[str] = None
     progress_percentage: Optional[int] = None
     error_message: Optional[str] = None
+    processing_steps: Optional[List[str]] = None
 
 
 class JobResult(BaseModel):
@@ -60,9 +61,10 @@ async def get_job_status(job_id: str):
             completed_at=status_data.get("completed_at"),
             step=status_data.get("step"),
             total_steps=status_data.get("total_steps"),
-            description=status_data.get("description"),
+            step_description=status_data.get("step_description"),
             progress_percentage=status_data.get("progress_percentage"),
             error_message=status_data.get("error_message"),
+            processing_steps=status_data.get("processing_steps"),
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -70,7 +72,7 @@ async def get_job_status(job_id: str):
 
 @app.get("/job/{job_id}/result", response_model=JobResult)
 async def get_job_result(job_id: str):
-    logger.info(f"Got job results request for job: {job_id}")
+    logger.info(f"Got result request for job: {job_id}")
     try:
         status_data = get_or_create_job_status(job_id)
 
@@ -89,7 +91,8 @@ async def get_job_result(job_id: str):
 
 @app.post("/process-video", response_model=JobStatus)
 async def start_video_processing(request: ProcessVideoRequest):
-    logger.info(f"Got job processing request | Job id: {request.job_id}")
+    load_dotenv()
+    logger.info(f"Got new dubbing job request: {request.job_id}")
 
     if not request.job_id:
         raise HTTPException(status_code=400, detail="Job_id is required")
@@ -111,21 +114,23 @@ async def start_video_processing(request: ProcessVideoRequest):
     if not request.tts_voice:
         raise HTTPException(status_code=400, detail="TTS voice is required")
 
-    if not request.api_keys:
-        raise HTTPException(status_code=400, detail="API-keys is required")
+    if not hasattr(request, 'is_premium'):
+        raise HTTPException(status_code=400, detail="User's subscription tier info is required")
 
-    if "openai" not in request.api_keys or not request.api_keys.get("openai"):
+    openai_key = os.getenv('OPENAI_API_KEY')
+    if not openai_key:
         raise HTTPException(
-            status_code=400, detail="OpenAI API key is required for all operations"
+            status_code=500,
+            detail="OpenAI API key not configured in internal service's environment"
         )
 
-    if request.tts_provider == "elevenlabs" and (
-        "elevenlabs" not in request.api_keys or not request.api_keys.get("elevenlabs")
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="ElevenLabs API key is required for ElevenLabs TTS provider",
-        )
+    if request.tts_provider == "elevenlabs":
+        elevenlabs_key = os.getenv('ELEVENLABS_API_KEY')
+        if not elevenlabs_key:
+            raise HTTPException(
+                status_code=500,
+                detail="ElevenLabs API key not configured in internal service's environment"
+            )
 
     os.makedirs("jobs", exist_ok=True)
     os.makedirs(f"jobs/{request.job_id}", exist_ok=True)
@@ -148,11 +153,22 @@ async def start_video_processing(request: ProcessVideoRequest):
         completed_at=job_status.get("completed_at"),
         step=job_status["step"],
         total_steps=job_status["total_steps"],
-        description=job_status["description"],
+        step_description=job_status["step_description"],
         progress_percentage=job_status["progress_percentage"],
         error_message=job_status.get("error_message"),
+        processing_steps=job_status.get("processing_steps"),
     )
 
+
+@app.get("/health")
+async def health_check():
+    logger.debug("Got health check request...")
+
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "service": "uniframe-dubbing-service"
+    }
 
 if __name__ == "__main__":
     load_dotenv()

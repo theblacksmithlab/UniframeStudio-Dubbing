@@ -58,7 +58,6 @@ audio_input/
 output/
 video_input/
 tts_reserve.py
-modules/legacy/
 video_output/
 lessons_status.json
 resources/intro_outro.mp3

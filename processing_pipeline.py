@@ -12,32 +12,30 @@ from utils.logger_config import setup_logger
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
-def run_command(command):
-    log_safe_command = command.copy()
-
-    for i, part in enumerate(log_safe_command):
-        if "--openai_api_key" in part and i < len(log_safe_command) - 1:
-            log_safe_command[i + 1] = "sk-***************"
-        elif "--elevenlabs_api_key" in part and i < len(log_safe_command) - 1:
-            log_safe_command[i + 1] = "***************"
-        elif part.startswith("--openai_api_key="):
-            log_safe_command[i] = "--openai_api_key=sk-***************"
-        elif part.startswith("--elevenlabs_api_key="):
-            log_safe_command[i] = "--elevenlabs_api_key=***************"
-
-    logger.info(f"Executing: {' '.join(command)}")
+def run_command(command, **kwargs):
     try:
-        subprocess.run(command, check=True)
+        kwargs.setdefault('capture_output', True)
+        kwargs.setdefault('text', True)
+
+        command_str = ' '.join(map(str, command))
+        logger.info(f"Executing: {command_str if len(command_str) < 100 else command_str[:97] + '...'}")
+
+        result = subprocess.run(command, **kwargs)
+
+        logger.info(f"Command exit code: {result.returncode}")
+
+        if result.stdout:
+            logger.info(f"[stdout]\n{result.stdout.strip()}")
+        if result.stderr:
+            logger.warning(f"[stderr]\n{result.stderr.strip()}")
+
+        if result.returncode != 0:
+            return False
+
         return True
-    except subprocess.CalledProcessError as e:
-        error_str = str(e)
 
-        if "openai_api_key" in error_str:
-            error_str = error_str.replace(error_str.split("openai_api_key")[1].split(" ")[0], "=sk-***************")
-        if "elevenlabs_api_key" in error_str:
-            error_str = error_str.replace(error_str.split("elevenlabs_api_key")[1].split(" ")[0], "=***************")
-
-        logger.error(f"Command execution error: {error_str}")
+    except Exception as e:
+        logger.exception(f"Error executing command: {e}")
         return False
 
 
@@ -104,7 +102,7 @@ def combine_video_and_audio(video_path, audio_path, output_path):
 
 
 def process_job(job_id, source_language=None, target_language=None, tts_provider=None, tts_voice=None,
-                elevenlabs_api_key=None, openai_api_key=None, is_premium=False):
+                elevenlabs_api_key=None, openai_api_key=None, is_premium=False, transcription_keywords=None):
     job_dir = f"jobs/{job_id}"
     input_video_dir = f"{job_dir}/video_input"
     processing_jsons_dir = f"{job_dir}/timestamped_transcriptions"
@@ -136,7 +134,6 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     logger.info(f"{'=' * 50}")
     logger.info(f"Processing job: {job_id}")
-    logger.info(f"Video file: {video_path}")
     if source_language:
         logger.info(f"Source language: {source_language}")
     logger.info(f"Target language: {target_language}")
@@ -167,7 +164,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Audio file created: {audio_path}")
+    # logger.info(f"Audio file created: {audio_path}")
 
     # [Step 2]
     current_step = 4
@@ -183,6 +180,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     if source_language:
         transcribe_cmd.extend(["--source_language", source_language])
+
+    if transcription_keywords:
+        transcribe_cmd.extend(["--transcription_keywords", transcription_keywords])
 
     if not run_command(transcribe_cmd):
         return {
@@ -200,7 +200,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Transcription file created: {transcription_path}")
+    # logger.info(f"Transcription file created: {transcription_path}")
 
     # [Step 3]
     current_step = 5
@@ -226,7 +226,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Corrected transcription file created: {corrected_path}")
+    # logger.info(f"Corrected transcription file created: {corrected_path}")
 
     # [Step 4]
     current_step = 6
@@ -252,7 +252,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Cleaned transcription file created: {cleaned_path}")
+    # logger.info(f"Cleaned transcription file created: {cleaned_path}")
 
     # [Step 5]
     current_step = 7
@@ -278,7 +278,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Optimized transcription file created: {optimized_path}")
+    # logger.info(f"Optimized transcription file created: {optimized_path}")
 
     # [Step 6]
     current_step = 8
@@ -307,7 +307,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Adjusted transcription file created: {adjusted_path}")
+    # logger.info(f"Adjusted transcription file created: {adjusted_path}")
 
     # [Step 7]
     current_step = 9
@@ -341,7 +341,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    logger.info(f"Segments translation file created: {translated_path}")
+    # logger.info(f"Segments translation file created: {translated_path}")
 
     # [Step 8]
     current_step = 10
@@ -409,8 +409,8 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         }
 
     logger.info(f"TTS generation completed!")
-    logger.info(f"Audio segments saved to: {audio_segments_dir}")
-    logger.info(f"Final audio saved to: {expected_audio_path}")
+    # logger.info(f"Audio segments saved to: {audio_segments_dir}")
+    # logger.info(f"Final audio saved to: {expected_audio_path}")
 
     # [Step 9]
     current_step = 11
@@ -444,6 +444,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     logger.info(f"Auto-correction completed!")
     logger.info(f"Final audio file: {final_audio_path}")
+
     if os.path.exists(final_stereo_path):
         logger.info(f"Final stereo file: {final_stereo_path}")
 
@@ -486,11 +487,11 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     logger.info(f"Audio processing completed!")
     logger.info(f"Clean audio: {final_audio_path}")
-    logger.info(f"Clean stereo: {final_stereo_path}")
+    logger.info(f"Clean stereo audio: {final_stereo_path}")
     if not is_premium:
         logger.info(f"Audio with ads: {final_audio_with_ads}")
         if os.path.exists(final_stereo_with_ads):
-            logger.info(f"Stereo with ads: {final_stereo_with_ads}")
+            logger.info(f"Stereo audio with ads: {final_stereo_with_ads}")
         else:
             logger.warning("Stereo audio with ads: not created")
 
@@ -732,7 +733,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     logger.info(f"{'=' * 50}")
     logger.info("=================================================================")
-    logger.info(f"COMPLETE VIDEO PROCESSING FINISHED SUCCESSFULLY!")
+    logger.info(f"JOB PROCESSING FINISHED SUCCESSFULLY!")
     logger.info(f"Job ID: {job_id}")
     logger.info(f"Original video: {video_path}")
     logger.info(f"Final video: {final_video_path_mute}")

@@ -116,7 +116,6 @@ def upload_results_to_s3(job_id: str, is_premium: bool = False) -> dict:
 
 def cleanup_job_files(job_id):
     job_base_dir = f"jobs/{job_id}"
-    logger.info(f"Cleaning up files for job {job_id}, keeping only status.json")
 
     for item in os.listdir(job_base_dir):
         item_path = os.path.join(job_base_dir, item)
@@ -134,19 +133,21 @@ def cleanup_job_files(job_id):
         except Exception as e:
             logger.error(f"Error removing item {item_path}: {e}")
 
-    logger.info(f"Cleanup completed for job {job_id}, only status.json remains")
+    logger.info(f"Cleanup completed for job: {job_id}, only status.json remains")
     return True
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Worker for processing video jobs")
+    parser = argparse.ArgumentParser(description="Worker for video processing job")
     parser.add_argument("--job_id", required=True, help="Job ID to process")
     args = parser.parse_args()
 
     job_id = args.job_id
     job_dir = f"jobs/{job_id}"
 
-    logger.info(f"Starting worker for job: {job_id}")
+    logger.info(f"Launching Worker for job: {job_id}...")
+
+    load_dotenv()
 
     if not os.path.exists(job_dir):
         logger.error(f"Job directory not found: {job_dir}")
@@ -178,7 +179,7 @@ def main():
         try:
             download_video_from_s3(params["video_url"], job_id)
             update_job_status(job_id=job_id, step=3)
-            logger.info(f"Successfully downloaded video for job {job_id}")
+            logger.info(f"Successfully downloaded video from S3 for job: {job_id}")
         except Exception as e:
             logger.error(f"Error downloading video: {e}")
             update_job_status(
@@ -188,7 +189,28 @@ def main():
             )
             return 1
 
-        logger.info(f"Starting job processing for job: {job_id} ...")
+        logger.info(f"Starting processing job: {job_id}...")
+
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        elevenlabs_api_key = os.getenv('ELEVENLABS_API_KEY')
+
+        if not openai_api_key:
+            logger.error("OpenAI API key not found in environment variables")
+            update_job_status(
+                job_id=job_id,
+                status=JOB_STATUS_FAILED,
+                error_message="OpenAI API key not configured",
+            )
+            return 1
+
+        if params["tts_provider"] == "elevenlabs" and not elevenlabs_api_key:
+            logger.error("ElevenLabs API key not found in environment variables")
+            update_job_status(
+                job_id=job_id,
+                status=JOB_STATUS_FAILED,
+                error_message="ElevenLabs API key not configured",
+            )
+            return 1
 
         result = process_job(
             job_id=job_id,
@@ -196,9 +218,10 @@ def main():
             target_language=params["target_language"],
             tts_provider=params["tts_provider"],
             tts_voice=params["tts_voice"],
-            elevenlabs_api_key=params["api_keys"].get("elevenlabs"),
-            openai_api_key=params["api_keys"].get("openai"),
-            is_premium=params.get("user_is_premium", False),
+            elevenlabs_api_key=elevenlabs_api_key,
+            openai_api_key=openai_api_key,
+            is_premium=params.get("is_premium", False),
+            transcription_keywords=params.get("transcription_keywords"),
         )
 
         if result["status"] == "success":
@@ -207,9 +230,9 @@ def main():
             update_job_status(job_id=job_id, step=15)
 
             try:
-                logger.info(f"Uploading results to S3 for job: {job_id}")
+                logger.info(f"Uploading results to S3 storage for job: {job_id}")
                 result_urls = upload_results_to_s3(
-                    job_id, params.get("user_is_premium", False)
+                    job_id, params.get("is_premium", False)
                 )
 
                 update_job_status(job_id=job_id, step=16, result_urls=result_urls)
@@ -220,7 +243,7 @@ def main():
 
                 cleanup_job_files(job_id)
 
-                logger.info(f"Job: {job_id} completed successfully")
+                logger.info(f"Job: {job_id} completed successfully!")
             except Exception as e:
                 logger.error(f"Error uploading results: {e}")
 
@@ -232,7 +255,7 @@ def main():
                 return 1
         else:
             logger.error(
-                f"Processing failed for job {job_id}: {result.get('message', 'Unknown error')}"
+                f"Processing failed for job: {job_id}: {result.get('message', 'Unknown error')}"
             )
 
             update_job_status(
@@ -243,7 +266,7 @@ def main():
             )
 
     except Exception as e:
-        logger.error(f"Unexpected error processing job {job_id}: {str(e)}")
+        logger.error(f"Unexpected error processing job: {job_id}: {str(e)}")
         import traceback
 
         logger.error(traceback.format_exc())

@@ -15,7 +15,6 @@ logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, voice="onyx", dealer="openai",
                               elevenlabs_api_key=None, openai_api_key=None):
-
     if dealer.lower() == "elevenlabs" and not elevenlabs_api_key:
         raise ValueError("ElevenLabs API key is required for ElevenLabs TTS but not provided by user")
 
@@ -49,6 +48,10 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
 
     generated_segments = []
 
+    openai_client = None
+    if dealer.lower() == "openai":
+        openai_client = openai.OpenAI(api_key=openai_api_key)
+
     for i, segment in enumerate(segments):
         text = segment.get("translated_text", "").strip()
         if not text:
@@ -62,23 +65,15 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
         data["segments"][i]["original_duration"] = original_duration_sec
 
         logger.info(f"Processing segment {i + 1}/{len(segments)}: '{text[:30]}...'")
-        logger.info(f"Start: {segment['start']}s, End: {segment['end']}s, Target Duration: {original_duration_ms / 1000}s")
+        logger.info(
+            f"Start: {segment['start']}s, End: {segment['end']}s, Target Duration: {original_duration_ms / 1000}s")
 
         segment_file = os.path.join(segments_dir, f"segment_{i}.mp3")
         temp_file = os.path.join(temp_dir, f"segment_{i}.mp3")
 
         try:
             if dealer.lower() == "openai":
-                client = openai.OpenAI(api_key=openai_api_key)
-
-                response = client.audio.speech.create(
-                    model="tts-1",
-                    voice=voice,
-                    input=text
-                )
-
-                with open(temp_file, "wb") as f:
-                    f.write(response.content)
+                generate_openai_tts_with_retry(openai_client, text, voice, temp_file)
 
             elif dealer.lower() == "elevenlabs":
                 previous_text = ""
@@ -174,7 +169,9 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
                 "file": segment_file
             })
 
-            os.remove(temp_file)
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+
 
         except Exception as e:
             logger.error(f"Error processing segment {i}: {e}")
@@ -183,7 +180,7 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
             if os.path.exists(temp_file):
                 try:
                     os.remove(temp_file)
-                except:
+                except (OSError, PermissionError):
                     pass
             continue
 
@@ -378,3 +375,48 @@ def make_api_request_with_retry(url, data, headers, max_retries=10, retry_delay=
         raise ValueError(f"API request failed with status code {last_status_code}: {last_response_text}")
     else:
         raise Exception(f"Failed after {max_retries} attempts. Last error: {last_exception}")
+
+
+def generate_openai_tts_with_retry(client, text, voice, temp_file, max_retries=10, retry_delay=2):
+    retries = 0
+    last_exception = None
+
+    while retries < max_retries:
+        try:
+            logger.info(f"Attempting OpenAI TTS generation (attempt {retries + 1}/{max_retries})")
+
+            response = client.audio.speech.create(
+                model="tts-1",
+                voice=voice,
+                input=text
+            )
+
+            if hasattr(response, 'content') and response.content:
+                with open(temp_file, "wb") as f:
+                    f.write(response.content)
+
+                if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
+                    logger.info("OpenAI TTS generation successful")
+                    return True
+                else:
+                    raise Exception("Generated audio file is empty or was not created")
+            else:
+                raise Exception("OpenAI API returned empty response")
+
+
+        except Exception as e:
+            last_exception = e
+            logger.warning(f"OpenAI TTS failed (attempt {retries + 1}/{max_retries}): {e}")
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except (OSError, PermissionError) as cleanup_error:
+                    logger.warning(f"Failed to remove damaged file {temp_file}: {cleanup_error}")
+
+        retries += 1
+        if retries < max_retries:
+            sleep_time = retry_delay * retries
+            logger.info(f"Retrying OpenAI TTS in {sleep_time} seconds...")
+            time.sleep(sleep_time)
+
+    raise Exception(f"OpenAI TTS failed after {max_retries} attempts. Last error: {last_exception}")
