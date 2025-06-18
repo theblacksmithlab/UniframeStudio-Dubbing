@@ -178,7 +178,7 @@ def main():
 
         try:
             download_video_from_s3(params["video_url"], job_id)
-            update_job_status(job_id=job_id, step=3)
+            update_job_status(job_id=job_id, step=2)
             logger.info(f"Successfully downloaded video from S3 for job: {job_id}")
         except Exception as e:
             logger.error(f"Error downloading video: {e}")
@@ -227,7 +227,7 @@ def main():
         if result["status"] == "success":
             logger.info(f"Processing completed successfully for job: {job_id}")
 
-            update_job_status(job_id=job_id, step=15)
+            update_job_status(job_id=job_id, step=16)
 
             try:
                 logger.info(f"Uploading results to S3 storage for job: {job_id}")
@@ -235,7 +235,7 @@ def main():
                     job_id, params.get("is_premium", False)
                 )
 
-                update_job_status(job_id=job_id, step=16, result_urls=result_urls)
+                update_job_status(job_id=job_id, step=17, result_urls=result_urls)
 
                 finalize_job(job_id)
 

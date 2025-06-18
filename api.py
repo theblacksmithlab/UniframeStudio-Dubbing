@@ -39,6 +39,7 @@ class JobStatus(BaseModel):
     progress_percentage: Optional[int] = None
     error_message: Optional[str] = None
     processing_steps: Optional[List[str]] = None
+    review_required_url: Optional[str] = None
 
 
 class JobResult(BaseModel):
@@ -65,6 +66,7 @@ async def get_job_status(job_id: str):
             progress_percentage=status_data.get("progress_percentage"),
             error_message=status_data.get("error_message"),
             processing_steps=status_data.get("processing_steps"),
+            review_required_url=status_data.get("review_required_url"),
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
