@@ -43,6 +43,8 @@ def transcribe_local(file_path: str, source_language: Optional[str] = None,
         else:
             prompt = base_prompt
 
+        logger.info(f"Prompt: {prompt}")
+
         transcribe_params = {
             "word_timestamps": True,
             "temperature": 0.0,

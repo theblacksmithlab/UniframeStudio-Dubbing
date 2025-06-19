@@ -345,7 +345,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     # [review step]
     logger.info(f"{'=' * 25}")
-    logger.info(f"[Step 8.5] Translated transcription review required...")
+    logger.info(f"[Review step] Translated transcription review required...")
     original_translated_transcription = translated_path
 
     get_review_result(job_id, original_translated_transcription)
