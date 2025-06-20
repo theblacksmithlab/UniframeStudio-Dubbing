@@ -38,10 +38,12 @@ def transcribe_local(file_path: str, source_language: Optional[str] = None,
 
         base_prompt = "Add proper punctuation."
         if transcription_keywords:
-            prompt = f"Keywords: {transcription_keywords}. {base_prompt}"
+            prompt = f"Keywords for transcription: {transcription_keywords}. {base_prompt}"
             logger.info(f"Using keywords: {transcription_keywords}")
         else:
             prompt = base_prompt
+
+        logger.info(f"Prompt: {prompt}")
 
         transcribe_params = {
             "word_timestamps": True,

@@ -7,7 +7,7 @@ import subprocess
 import sys
 from modules.job_status import update_job_status
 from utils.logger_config import setup_logger
-
+from utils.transcription_review import get_review_result
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
@@ -343,8 +343,15 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     # logger.info(f"Segments translation file created: {translated_path}")
 
+    # [review step]
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Review step] Translated transcription review required...")
+    original_translated_transcription = translated_path
+
+    get_review_result(job_id, original_translated_transcription)
+
     # [Step 8]
-    current_step = 10
+    current_step = 11
     update_job_status(job_id=job_id, step=current_step)
     logger.info(f"{'=' * 25}")
     logger.info(f"[Step 8] Generating audio using {tts_provider} with voice {tts_voice}...")
@@ -413,7 +420,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     # logger.info(f"Final audio saved to: {expected_audio_path}")
 
     # [Step 9]
-    current_step = 11
+    current_step = 12
     update_job_status(job_id=job_id, step=current_step)
     logger.info(f"{'=' * 25}")
     logger.info(f"[Step 9] Auto-correcting segment durations...")
@@ -449,7 +456,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         logger.info(f"Final stereo file: {final_stereo_path}")
 
     # [Step 10]
-    current_step = 12
+    current_step = 13
     update_job_status(job_id=job_id, step=current_step)
     logger.info(f"{'=' * 25}")
     logger.info(f"[Step 10] Creating audio versions with intro/outro...")
@@ -496,7 +503,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             logger.warning("Stereo audio with ads: not created")
 
     # [Step 11]
-    current_step = 13
+    current_step = 14
     update_job_status(job_id=job_id, step=13)
     logger.info(f"{'=' * 25}")
     logger.info(f"[Step 11] Processing video with new audio...")
@@ -553,7 +560,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     logger.info(f"Mute videos created successfully")
 
     # [Step 12]
-    current_step = 14
+    current_step = 15
     update_job_status(job_id=job_id, step=current_step)
     logger.info(f"{'=' * 25}")
     logger.info(f"[Step 12] Combining mute videos with stereo audio...")
