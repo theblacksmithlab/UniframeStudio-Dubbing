@@ -178,7 +178,6 @@ def main():
 
         try:
             download_video_from_s3(params["video_url"], job_id)
-            update_job_status(job_id=job_id, step=2)
             logger.info(f"Successfully downloaded video from S3 for job: {job_id}")
         except Exception as e:
             logger.error(f"Error downloading video: {e}")
