@@ -58,82 +58,6 @@ def get_sequence_length(sentence_words):
         return 5  # Для длинных предложений
 
 
-def is_punctuation_word(word):
-    """Проверяет, является ли слово знаком препинания или символом"""
-    cleaned = word.strip()
-    return len(cleaned) <= 2 and not cleaned.isalnum()
-
-
-def fuzzy_sequence_match(target_sequence, segment_words, search_from_start=True):
-    """
-    Нечеткий поиск последовательности с пропуском пунктуации
-
-    Args:
-        target_sequence: список слов для поиска
-        segment_words: отфильтрованные слова сегмента
-        search_from_start: направление поиска
-
-    Returns:
-        индекс начального слова найденной последовательности или None
-    """
-    if not target_sequence or not segment_words:
-        return None
-
-    # Минимум 80% совпадений, но не менее 1 слова
-    required_matches = max(1, int(len(target_sequence) * 0.8))
-
-    logger.info(f"Fuzzy search: need {required_matches} matches out of {len(target_sequence)} words")
-
-    # Определяем направление поиска
-    search_range = range(len(segment_words)) if search_from_start else range(len(segment_words) - 1, -1, -1)
-
-    for i in search_range:
-        matches = 0
-        j = 0  # индекс в target_sequence
-        first_match_pos = None
-        last_match_pos = None
-
-        # Расширенное окно поиска (до 2x длины последовательности)
-        max_search_distance = min(len(target_sequence) * 2, len(segment_words) - i)
-
-        if search_from_start:
-            search_positions = range(i, min(i + max_search_distance, len(segment_words)))
-        else:
-            search_positions = range(max(0, i - max_search_distance), i + 1)
-
-        for k in search_positions:
-            if j >= len(target_sequence):
-                break
-
-            current_word = segment_words[k]["word"]
-
-            # Пропускаем пунктуацию
-            if is_punctuation_word(current_word):
-                continue
-
-            # Проверяем совпадение с текущим искомым словом
-            if normalize_word(current_word) == normalize_word(target_sequence[j]):
-                matches += 1
-                j += 1
-
-                if first_match_pos is None:
-                    first_match_pos = k
-                last_match_pos = k
-
-                logger.debug(f"Match {matches}/{required_matches}: '{current_word}' at position {k}")
-
-        # Проверяем, достаточно ли совпадений
-        if matches >= required_matches:
-            return_index = first_match_pos if search_from_start else (
-                last_match_pos - len(target_sequence) + 1 if last_match_pos is not None else i)
-            logger.info(
-                f"Fuzzy match found: {matches}/{len(target_sequence)} matches, starting at position {return_index}")
-            return segment_words[max(0, return_index)]["original_index"]
-
-    logger.warning(f"Fuzzy search failed: no sufficient matches found")
-    return None
-
-
 def find_word_sequence_in_timeframe(target_sequence, words_array, segment_start, segment_end, search_from_start=True):
     # Фильтруем слова только в пределах сегмента
     segment_words = []
@@ -157,7 +81,7 @@ def find_word_sequence_in_timeframe(target_sequence, words_array, segment_start,
     logger.info(
         f"Searching for sequence {target_sequence} in {len(segment_words)} words (timeframe {segment_start:.2f}-{segment_end:.2f})")
 
-    # Сначала пробуем точный поиск
+    # Определяем направление поиска
     search_range = range(len(segment_words)) if search_from_start else range(len(segment_words) - 1, -1, -1)
 
     for i in search_range:
@@ -194,12 +118,11 @@ def find_word_sequence_in_timeframe(target_sequence, words_array, segment_start,
             else:
                 found_index = segment_words[i - len(target_sequence) + 1]["original_index"]
 
-            logger.info(f"Exact match found for sequence {target_sequence} at word index {found_index}")
+            logger.info(f"Found sequence {target_sequence} at word index {found_index}")
             return found_index
 
-    # Если точный поиск не сработал, используем нечеткий поиск
-    logger.info(f"Exact search failed, trying fuzzy search for sequence {target_sequence}")
-    return fuzzy_sequence_match(target_sequence, segment_words, search_from_start)
+    logger.warning(f"Sequence {target_sequence} not found in timeframe")
+    return None
 
 
 def get_sentence_timestamps_precise(sentence, segment, words_list):
@@ -380,6 +303,10 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
         next_seg = new_segments[i + 1]
 
         if current_seg["end"] > next_seg["start"]:
+            logger.error(f"UNEXPECTED OVERLAP detected between segments {i} and {i + 1}!")
+            logger.error(f"Segment {i}: {current_seg['end']:.2f}, Segment {i + 1}: {next_seg['start']:.2f}")
+            logger.error(f"This indicates a problem in timestamp detection algorithm!")
+
             # Находим середину перекрытия и создаем небольшой зазор
             overlap_mid = (current_seg["end"] + next_seg["start"]) / 2
             gap = 0.05  # 50мс зазор
