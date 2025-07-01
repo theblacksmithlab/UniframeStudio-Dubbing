@@ -10,7 +10,7 @@ from modules.translation import translate_transcribed_segments
 from modules.tts import generate_tts_for_segments, reassemble_audio_file
 from modules.video_processor import VideoProcessor
 from modules.video_to_audio_conversion import extract_audio
-from modules.optimized_segmentation import optimize_transcription_segments
+from modules.optimized_segmentation_via_LLL import optimize_transcription_segments
 from modules.automatic_text_correction import correct_segment_durations
 from utils.logger_config import setup_logger
 
@@ -90,6 +90,9 @@ def main():
     )
     optimize_parser.add_argument(
         "--output", "-o", help="Path to save the optimized transcription (optional)"
+    )
+    optimize_parser.add_argument(
+        "--openai_api_key", required=True, help="OpenAI API key"
     )
 
 
@@ -317,7 +320,10 @@ def main():
 
         logger.info(f"Optimizing segments in transcription file: {args.input}")
         try:
-            result_file = optimize_transcription_segments(args.input, args.output)
+            result_file = optimize_transcription_segments(
+                args.input,
+                args.output,
+                openai_api_key=args.openai_api_key,)
             logger.info(
                 f"Segment optimization completed successfully. The result was saved in file: {result_file}"
             )

@@ -262,6 +262,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     optimized_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed_corrected_cleaned_optimized.json")
     optimize_cmd = [sys.executable, "cli.py", "optimize", "--input", cleaned_path, "--output", optimized_path]
 
+    if openai_api_key:
+        optimize_cmd.extend(["--openai_api_key", openai_api_key])
+
     if not run_command(optimize_cmd):
         return {
             "status": "error",
