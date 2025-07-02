@@ -22,9 +22,9 @@ class AudioProcessor:
 
         # Создаем структуру папок
         self.temp_dir = Path(f"jobs/{job_id}/temp_audio_processing")
-        self.audio_segments_dir = self.temp_dir / "bg_audio_segments"
-        self.processed_audio_segments_dir = self.temp_dir / "processed_bg_audio_segments"
-        self.audio_gaps_dir = self.temp_dir / "bg_audio_gaps"
+        self.audio_segments_dir = self.temp_dir / "audio_segments"
+        self.processed_audio_segments_dir = self.temp_dir / "processed_audio_segments"
+        self.audio_gaps_dir = self.temp_dir / "audio_gaps"
 
         # Создаем папки
         self.temp_dir.mkdir(exist_ok=True)
