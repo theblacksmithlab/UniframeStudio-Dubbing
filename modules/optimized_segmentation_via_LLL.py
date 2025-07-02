@@ -266,8 +266,22 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
             current_start = segment["start"]
             current_end = segment["end"]
         else:
-            current_text += " " + text
-            current_end = segment["end"]
+            time_gap = segment["start"] - current_end
+            max_allowed_gap = 2.0
+
+            if time_gap <= max_allowed_gap:
+                current_text += " " + text
+                current_end = segment["end"]
+            else:
+                merged_segments.append({
+                    "start": current_start,
+                    "end": current_end,
+                    "text": current_text
+                })
+
+                current_text = text
+                current_start = segment["start"]
+                current_end = segment["end"]
 
     if current_text:
         merged_segments.append({
