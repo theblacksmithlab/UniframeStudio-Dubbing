@@ -193,22 +193,22 @@ class AudioProcessor:
         input_files = []
 
         # Начальный gap
-        initial_gap_path = self.audio_gaps_dir / "bg_audio_gap_start_0000.mp3"
+        initial_gap_path = self.audio_gaps_dir / "audio_gap_start_0000.mp3"
         if initial_gap_path.exists():
             input_files.append(str(initial_gap_path))
 
         # Сегменты и gap'ы между ними
         for i in range(len(segments)):
-            segment_path = self.processed_audio_segments_dir / f"processed_bg_audio_segment_{i:04d}.mp3"
+            segment_path = self.processed_audio_segments_dir / f"processed_audio_segment_{i:04d}.mp3"
             if os.path.exists(segment_path):
                 input_files.append(str(segment_path))
 
-            gap_path = self.audio_gaps_dir / f"bg_audio_gap_{i:04d}_{i + 1:04d}.mp3"
+            gap_path = self.audio_gaps_dir / f"audio_gap_{i:04d}_{i + 1:04d}.mp3"
             if gap_path.exists():
                 input_files.append(str(gap_path))
 
         # Финальный gap
-        final_gap_path = self.audio_gaps_dir / f"bg_audio_gap_{len(segments) - 1:04d}_end.mp3"
+        final_gap_path = self.audio_gaps_dir / f"audio_gap_{len(segments) - 1:04d}_end.mp3"
         if final_gap_path.exists():
             input_files.append(str(final_gap_path))
 
