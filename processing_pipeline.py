@@ -554,8 +554,8 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     if os.path.exists(final_stereo_path):
         new_audio_track = final_stereo_path
-        logger.warning(f"Stereo audio not found, using regular audio: {os.path.basename(new_audio_track)}")
     else:
+        logger.warning(f"Stereo audio not found, using regular audio: {os.path.basename(final_audio_path)}")
         new_audio_track = final_audio_path
 
     if not combine_video_and_audio(tts_based_video_path, new_audio_track, final_video_path):
