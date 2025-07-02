@@ -203,13 +203,13 @@ def main():
         if result["status"] == "success":
             logger.info(f"Processing completed successfully for job: {job_id}")
 
-            update_job_status(job_id=job_id, step=15)
+            update_job_status(job_id=job_id, step=17)
 
             try:
                 logger.info(f"Uploading results to S3 storage for job: {job_id}")
                 result_urls = upload_results_to_s3(job_id)
 
-                update_job_status(job_id=job_id, step=16, result_urls=result_urls)
+                update_job_status(job_id=job_id, step=18, result_urls=result_urls)
 
                 finalize_job(job_id)
 

@@ -5,6 +5,8 @@ import argparse
 import shutil
 import subprocess
 import sys
+
+from modules.audio_processor import AudioProcessor
 from modules.job_status import update_job_status
 from utils.logger_config import setup_logger
 from utils.transcription_review import get_review_result
@@ -98,6 +100,46 @@ def combine_video_and_audio(video_path, audio_path, output_path):
 
     except Exception as e:
         logger.error(f"Combining video and audio failed with error: {e}")
+        return False
+
+
+def mix_audio_tracks(tts_audio_path, background_audio_path, output_path, tts_volume=1.0, bg_volume=0.3):
+    """
+    Миксует TTS аудио с фоновой подложкой
+
+    :param tts_audio_path: Путь к TTS аудио (новая озвучка)
+    :param background_audio_path: Путь к фоновой подложке (обработанное оригинальное аудио)
+    :param output_path: Выходной файл
+    :param tts_volume: Громкость TTS (1.0 = 100%)
+    :param bg_volume: Громкость подложки (0.3 = 30%)
+    :return: True если успешно
+    """
+    try:
+        logger.info(f"Mixing TTS (vol: {tts_volume}) + Background (vol: {bg_volume})")
+
+        cmd = [
+            'ffmpeg', '-y',
+            '-i', tts_audio_path,  # вход 0: TTS
+            '-i', background_audio_path,  # вход 1: подложка
+            '-filter_complex',
+            f'[0:a]volume={tts_volume}[tts];[1:a]volume={bg_volume}[bg];[tts][bg]amix=inputs=2:duration=shortest[out]',
+            '-map', '[out]',
+            '-acodec', 'mp3',
+            '-b:a', '320k',
+            output_path
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode == 0:
+            logger.info(f"Successfully mixed audio: {os.path.basename(output_path)}")
+            return True
+        else:
+            logger.error(f"Audio mixing failed: {result.stderr}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Audio mixing failed: {e}")
         return False
 
 
@@ -509,11 +551,37 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     #     else:
     #         logger.warning("Stereo audio with ads: not created")
 
-    # [Step 10]
+    # [Step X]
     current_step = 13
     update_job_status(job_id=job_id, step=current_step)
     logger.info(f"{'=' * 25}")
-    logger.info(f"[Step 11] Processing video with new audio...")
+    logger.info(f"[Step X] Processing background audio...")
+
+    with open(translated_path, 'r') as f:
+        segments_data = json.load(f)
+
+    audio_processor = AudioProcessor(job_id, video_path, segments_data)
+    audio_processor.extract_audio_segments()
+    audio_processor.process_audio_segments()
+    background_audio_path = audio_processor.combine_background_audio()
+
+    # Step [X + 1]
+    current_step = 14
+    update_job_status(job_id=job_id, step=current_step)
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step X] Creating all audio files...")
+
+    mixed_audio_path = os.path.join(audio_result_dir, "mixed_audio_with_bg.mp3")
+    mixed_stereo_path = os.path.join(audio_result_dir, "mixed_stereo_with_bg.mp3")
+
+    mix_audio_tracks(final_audio_path, background_audio_path, mixed_audio_path)
+    create_stereo_version(mixed_audio_path, mixed_stereo_path)
+
+    # [Step 10]
+    current_step = 15
+    update_job_status(job_id=job_id, step=current_step)
+    logger.info(f"{'=' * 25}")
+    logger.info(f"[Step 10] Processing video with new audio...")
     video_result_dir = os.path.join(result_output_dir, "video_result")
     os.makedirs(video_result_dir, exist_ok=True)
 
@@ -545,20 +613,35 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     logger.info(f"TTS-based videos created successfully")
 
     # [Step 11]
-    current_step = 14
+    current_step = 16
     update_job_status(job_id=job_id, step=current_step)
     logger.info(f"{'=' * 25}")
-    logger.info(f"[Step 12] Combining mute videos with stereo audio...")
+    logger.info(f"[Step 11] Combining mute videos with stereo audio...")
 
     final_video_path = os.path.join(video_result_dir, f"{base_name}_processed.mp4")
+    final_video_with_bg_path = os.path.join(video_result_dir, f"{base_name}_processed_with_bg.mp4")
 
     if os.path.exists(final_stereo_path):
         new_audio_track = final_stereo_path
     else:
-        logger.warning(f"Stereo audio not found, using regular audio: {os.path.basename(final_audio_path)}")
+        logger.warning(f"Stereo audio not found, using mono audio: {os.path.basename(final_audio_path)}")
         new_audio_track = final_audio_path
 
     if not combine_video_and_audio(tts_based_video_path, new_audio_track, final_video_path):
+        return {
+            "status": "error",
+            "message": f"Failed to create final video file",
+            "job_id": job_id,
+            "step": current_step
+        }
+
+    if os.path.exists(mixed_stereo_path):
+        new_audio_track_with_background = mixed_stereo_path
+    else:
+        logger.warning(f"Stereo audio with background not found, using mono audio: {os.path.basename(mixed_audio_path)}")
+        new_audio_track_with_background = mixed_audio_path
+
+    if not combine_video_and_audio(tts_based_video_path, new_audio_track_with_background, final_video_with_bg_path):
         return {
             "status": "error",
             "message": f"Failed to create final video file",
@@ -590,6 +673,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "final_audio": final_audio_path,
             "final_audio_stereo": final_stereo_path,
             "final_video": final_video_path,
+            "final_audio_with_bg": mixed_audio_path,
+            "final_audio_stereo_with_bg": mixed_stereo_path,
+            "final_video_with_bg": final_video_with_bg_path,
             "final_video_tts_based": tts_based_video_path
 
         },
@@ -619,7 +705,14 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         (final_video_path,
          os.path.join(job_result_dir, os.path.basename(final_video_path))),
         (tts_based_video_path,
-         os.path.join(job_result_dir, os.path.basename(tts_based_video_path)))
+         os.path.join(job_result_dir, os.path.basename(tts_based_video_path))),
+
+        (mixed_audio_path,
+         os.path.join(job_result_dir, os.path.basename(mixed_audio_path))),
+        (mixed_stereo_path,
+         os.path.join(job_result_dir, os.path.basename(mixed_stereo_path))),
+        (final_video_with_bg_path,
+         os.path.join(job_result_dir, os.path.basename(final_video_with_bg_path)))
     ]
 
     moved_files = []
@@ -636,6 +729,11 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     result["output_files"]["translated"] = os.path.join(job_result_dir, os.path.basename(translated_path))
     result["output_files"]["final_video"] = os.path.join(job_result_dir, os.path.basename(final_video_path))
     result["output_files"]["final_video_tts_based"] = os.path.join(job_result_dir, os.path.basename(tts_based_video_path))
+    result["output_files"]["final_audio_with_bg"] = os.path.join(job_result_dir, os.path.basename(mixed_audio_path))
+    result["output_files"]["final_audio_stereo_with_bg"] = os.path.join(job_result_dir,
+                                                                        os.path.basename(mixed_stereo_path))
+    result["output_files"]["final_video_with_bg"] = os.path.join(job_result_dir,
+                                                                 os.path.basename(final_video_with_bg_path))
 
     with open(os.path.join(job_result_dir, "pipeline_result.json"), "w") as f:
         json.dump(result, f, indent=2)

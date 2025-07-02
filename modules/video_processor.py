@@ -5,9 +5,7 @@ from pathlib import Path
 import shutil
 from utils.logger_config import setup_logger
 
-
 logger = setup_logger(name=__name__, log_file="logs/app.log")
-
 
 class VideoProcessor:
     def __init__(

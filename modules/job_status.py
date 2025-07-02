@@ -8,7 +8,7 @@ from utils.logger_config import setup_logger
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
-JOB_TOTAL_STEPS = 16
+JOB_TOTAL_STEPS = 18
 
 STEP_DESCRIPTIONS = {
     1: "Initializing dubbing system components...",
@@ -23,10 +23,12 @@ STEP_DESCRIPTIONS = {
     10: "Transcription review required...",
     11: "Generating TTS segments...",
     12: "Auto-correcting segment durations...",
-    13: "Processing video with new audio...",
-    14: "Creating final video with stereo audio...",
-    15: "Uploading results to S3 storage...",
-    16: "Finalizing dubbing job..."
+    13: "Processing background audio...",
+    14: "Creating all audio files...",
+    15: "Processing video with new audio...",
+    16: "Creating final video with stereo audio...",
+    17: "Uploading results to S3 storage...",
+    18: "Finalizing dubbing job..."
 }
 
 JOB_STATUS_PROCESSING = "processing"
