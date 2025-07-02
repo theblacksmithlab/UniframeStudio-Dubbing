@@ -220,7 +220,8 @@ class AudioProcessor:
         concat_file = self.temp_dir / "audio_concat_list.txt"
         with open(concat_file, 'w') as f:
             for file_path in input_files:
-                f.write(f"file '{file_path}'\n")
+                abs_path = os.path.abspath(file_path)
+                f.write(f"file '{abs_path}'\n")
 
         # Выходной файл
         background_audio_path = self.temp_dir / "background_audio.mp3"
