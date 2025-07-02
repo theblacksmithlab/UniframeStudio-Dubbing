@@ -479,10 +479,6 @@ def main():
                 logger.error(f"Segments data JSON file not found: {args.json_file}")
                 sys.exit(1)
 
-            if not os.path.exists(args.resources_dir):
-                logger.error(f"Resources directory not found: {args.resources_dir}")
-                sys.exit(1)
-
             os.makedirs(os.path.dirname(args.output_video), exist_ok=True)
 
             processor = VideoProcessor(
