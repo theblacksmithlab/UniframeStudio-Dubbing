@@ -42,7 +42,7 @@ def download_video_from_s3(video_url: str, job_id: str) -> str:
         raise
 
 
-def upload_results_to_s3(job_id: str, is_premium: bool = False) -> dict:
+def upload_results_to_s3(job_id: str) -> dict:
     job_result_dir = f"jobs/{job_id}/job_result"
     pipeline_result_path = os.path.join(job_result_dir, "pipeline_result.json")
 
@@ -68,32 +68,10 @@ def upload_results_to_s3(job_id: str, is_premium: bool = False) -> dict:
             "translated": pipeline_result["output_files"]["translated"],
             "audio": pipeline_result["output_files"]["final_audio"],
             "audio_stereo": pipeline_result["output_files"]["final_audio_stereo"],
-            "video_premium": pipeline_result["output_files"]["final_video_premium"],
+            "final_video": pipeline_result["output_files"]["final_video"],
+            "final_video_tts_based": pipeline_result["output_files"]["final_video_tts_based"]
         }
     )
-
-    if not is_premium:
-        files_to_upload.update(
-            {
-                "video": pipeline_result["output_files"].get("final_video", ""),
-                "audio_with_ads": pipeline_result["output_files"].get(
-                    "final_audio_with_ads", ""
-                ),
-                "audio_stereo_with_ads": pipeline_result["output_files"].get(
-                    "final_audio_stereo_with_ads", ""
-                ),
-            }
-        )
-
-    if "final_video_mute_premium" in pipeline_result["output_files"]:
-        files_to_upload["video_mute_premium"] = pipeline_result["output_files"][
-            "final_video_mute_premium"
-        ]
-
-    if not is_premium and "final_video_mute" in pipeline_result["output_files"]:
-        files_to_upload["video_mute"] = pipeline_result["output_files"][
-            "final_video_mute"
-        ]
 
     for file_type, local_path in files_to_upload.items():
         if local_path and os.path.exists(local_path):
@@ -219,22 +197,19 @@ def main():
             tts_voice=params["tts_voice"],
             elevenlabs_api_key=elevenlabs_api_key,
             openai_api_key=openai_api_key,
-            is_premium=params.get("is_premium", False),
             transcription_keywords=params.get("transcription_keywords"),
         )
 
         if result["status"] == "success":
             logger.info(f"Processing completed successfully for job: {job_id}")
 
-            update_job_status(job_id=job_id, step=16)
+            update_job_status(job_id=job_id, step=15)
 
             try:
                 logger.info(f"Uploading results to S3 storage for job: {job_id}")
-                result_urls = upload_results_to_s3(
-                    job_id, params.get("is_premium", False)
-                )
+                result_urls = upload_results_to_s3(job_id)
 
-                update_job_status(job_id=job_id, step=17, result_urls=result_urls)
+                update_job_status(job_id=job_id, step=16, result_urls=result_urls)
 
                 finalize_job(job_id)
 

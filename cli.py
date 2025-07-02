@@ -221,15 +221,6 @@ def main():
     video_parser.add_argument(
         "--output_video", required=True, help="Path for output video"
     )
-    video_parser.add_argument(
-        "--output_video_premium", required=True, help="Path for premium output video"
-    )
-    video_parser.add_argument(
-        "--resources_dir", required=True, help="Path to resources directory"
-    )
-    video_parser.add_argument(
-        "--is_premium", action="store_true", help="Premium user (no intro/outro)"
-    )
 
     args = parser.parse_args()
 
@@ -499,10 +490,7 @@ def main():
                 input_video_path=args.input_video,
                 json_path=args.json_file,
                 output_video_path=args.output_video,
-                output_video_path_premium=args.output_video_premium,
-                intro_outro_path=args.resources_dir,
                 target_fps=25,
-                is_premium=args.is_premium,
             )
 
             if processor.process():

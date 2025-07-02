@@ -24,7 +24,6 @@ class ProcessVideoRequest(BaseModel):
     tts_provider: str
     tts_voice: str
     source_language: Optional[str] = None
-    is_premium: bool
     transcription_keywords: Optional[str] = None
 
 
@@ -115,9 +114,6 @@ async def start_video_processing(request: ProcessVideoRequest):
 
     if not request.tts_voice:
         raise HTTPException(status_code=400, detail="TTS voice is required")
-
-    if not hasattr(request, 'is_premium'):
-        raise HTTPException(status_code=400, detail="User's subscription tier info is required")
 
     openai_key = os.getenv('OPENAI_API_KEY')
     if not openai_key:

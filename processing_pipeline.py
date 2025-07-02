@@ -102,7 +102,7 @@ def combine_video_and_audio(video_path, audio_path, output_path):
 
 
 def process_job(job_id, source_language=None, target_language=None, tts_provider=None, tts_voice=None,
-                elevenlabs_api_key=None, openai_api_key=None, is_premium=False, transcription_keywords=None):
+                elevenlabs_api_key=None, openai_api_key=None, transcription_keywords=None):
     job_dir = f"jobs/{job_id}"
     input_video_dir = f"{job_dir}/video_input"
     processing_jsons_dir = f"{job_dir}/timestamped_transcriptions"
@@ -458,74 +458,72 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     if os.path.exists(final_stereo_path):
         logger.info(f"Final stereo file: {final_stereo_path}")
 
-    # [Step 10]
-    current_step = 13
-    update_job_status(job_id=job_id, step=current_step)
-    logger.info(f"{'=' * 25}")
-    logger.info(f"[Step 10] Creating audio versions with intro/outro...")
-
-    final_audio_with_ads = os.path.join(audio_result_dir, "new_audio_ads.mp3")
-    final_stereo_with_ads = os.path.join(audio_result_dir, "new_audio_stereo_ads.mp3")
-
-    if not is_premium:
-        logger.info("Creating audio with intro/outro...")
-        if not add_intro_outro_audio(final_audio_path, final_audio_with_ads, "resources"):
-            return {
-                "status": "error",
-                "message": f"Failed to create final audio file",
-                "job_id": job_id,
-                "step": current_step
-            }
-
-        if not os.path.exists(final_audio_with_ads):
-            return {
-                "status": "error",
-                "message": f"Failed to create final audio file",
-                "job_id": job_id,
-                "step": current_step
-            }
-
-        if not create_stereo_version(final_audio_with_ads, final_stereo_with_ads):
-            logger.warning(f"Failed to create stereo version of audio with ads, but continuing...")
-        elif not os.path.exists(final_stereo_with_ads):
-            logger.warning(f"Stereo audio with ads file {final_stereo_with_ads} not created, but continuing...")
-        else:
-            logger.info(f"Successfully created stereo version with ads: {final_stereo_with_ads}")
-
-    else:
-        logger.info("Premium user - skipping intro/outro for audio")
-
     logger.info(f"Audio processing completed!")
     logger.info(f"Clean audio: {final_audio_path}")
     logger.info(f"Clean stereo audio: {final_stereo_path}")
-    if not is_premium:
-        logger.info(f"Audio with ads: {final_audio_with_ads}")
-        if os.path.exists(final_stereo_with_ads):
-            logger.info(f"Stereo audio with ads: {final_stereo_with_ads}")
-        else:
-            logger.warning("Stereo audio with ads: not created")
 
-    # [Step 11]
-    current_step = 14
-    update_job_status(job_id=job_id, step=13)
+    # # [Step 10]
+    # current_step = 13
+    # update_job_status(job_id=job_id, step=current_step)
+    # logger.info(f"{'=' * 25}")
+    # logger.info(f"[Step 10] Creating audio versions with intro/outro...")
+    #
+    # final_audio_with_ads = os.path.join(audio_result_dir, "new_audio_ads.mp3")
+    # final_stereo_with_ads = os.path.join(audio_result_dir, "new_audio_stereo_ads.mp3")
+    #
+    # if not is_premium:
+    #     logger.info("Creating audio with intro/outro...")
+    #     if not add_intro_outro_audio(final_audio_path, final_audio_with_ads, "resources"):
+    #         return {
+    #             "status": "error",
+    #             "message": f"Failed to create final audio file",
+    #             "job_id": job_id,
+    #             "step": current_step
+    #         }
+    #
+    #     if not os.path.exists(final_audio_with_ads):
+    #         return {
+    #             "status": "error",
+    #             "message": f"Failed to create final audio file",
+    #             "job_id": job_id,
+    #             "step": current_step
+    #         }
+    #
+    #     if not create_stereo_version(final_audio_with_ads, final_stereo_with_ads):
+    #         logger.warning(f"Failed to create stereo version of audio with ads, but continuing...")
+    #     elif not os.path.exists(final_stereo_with_ads):
+    #         logger.warning(f"Stereo audio with ads file {final_stereo_with_ads} not created, but continuing...")
+    #     else:
+    #         logger.info(f"Successfully created stereo version with ads: {final_stereo_with_ads}")
+    #
+    # else:
+    #     logger.info("Premium user - skipping intro/outro for audio")
+    #
+    # logger.info(f"Audio processing completed!")
+    # logger.info(f"Clean audio: {final_audio_path}")
+    # logger.info(f"Clean stereo audio: {final_stereo_path}")
+    # if not is_premium:
+    #     logger.info(f"Audio with ads: {final_audio_with_ads}")
+    #     if os.path.exists(final_stereo_with_ads):
+    #         logger.info(f"Stereo audio with ads: {final_stereo_with_ads}")
+    #     else:
+    #         logger.warning("Stereo audio with ads: not created")
+
+    # [Step 10]
+    current_step = 13
+    update_job_status(job_id=job_id, step=current_step)
     logger.info(f"{'=' * 25}")
     logger.info(f"[Step 11] Processing video with new audio...")
     video_result_dir = os.path.join(result_output_dir, "video_result")
     os.makedirs(video_result_dir, exist_ok=True)
 
-    final_video_path_mute = os.path.join(video_result_dir, f"{base_name}_tts_based_mute.mp4")
-    final_video_path_mute_premium = os.path.join(video_result_dir, f"{base_name}_tts_based_mute_premium.mp4")
+    tts_based_video_path = os.path.join(video_result_dir, f"{base_name}_tts_based.mp4")
 
     process_video_cmd = [sys.executable, "cli.py", "process_video",
                          "--job_id", job_id,
                          "--input_video", video_path,
                          "--json_file", translated_path,
-                         "--output_video", final_video_path_mute,
-                         "--output_video_premium", final_video_path_mute_premium,
-                         "--resources_dir", "resources"]
-
-    if is_premium:
-        process_video_cmd.append("--is_premium")
+                         "--output_video", tts_based_video_path]
 
     if not run_command(process_video_cmd):
         return {
@@ -535,109 +533,41 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    if is_premium:
-        if not os.path.exists(final_video_path_mute_premium):
-            return {
-                "status": "error",
-                "message": f"Expected muted video file not created",
-                "job_id": job_id,
-                "step": current_step
-            }
-    else:
-        if not os.path.exists(final_video_path_mute):
-            return {
-                "status": "error",
-                "message": f"Expected muted video file not created",
-                "job_id": job_id,
-                "step": current_step
-            }
-        if not os.path.exists(final_video_path_mute_premium):
-            return {
-                "status": "error",
-                "message": f"Expected muted video file not created",
-                "job_id": job_id,
-                "step": current_step
-            }
+    if not os.path.exists(tts_based_video_path):
+        return {
+            "status": "error",
+            "message": f"Expected tts-based video file not created",
+            "job_id": job_id,
+            "step": current_step
+        }
 
     logger.info(f"Video processing completed!")
-    logger.info(f"Mute videos created successfully")
+    logger.info(f"TTS-based videos created successfully")
 
-    # [Step 12]
-    current_step = 15
+    # [Step 11]
+    current_step = 14
     update_job_status(job_id=job_id, step=current_step)
     logger.info(f"{'=' * 25}")
     logger.info(f"[Step 12] Combining mute videos with stereo audio...")
 
-    final_video_path = os.path.join(video_result_dir, f"{base_name}_tts_based.mp4")
-    final_video_path_premium = os.path.join(video_result_dir, f"{base_name}_tts_based_premium.mp4")
+    final_video_path = os.path.join(video_result_dir, f"{base_name}_processed.mp4")
 
-    if is_premium:
-        logger.info("Premium user: combining premium mute video with audio...")
-
-        if os.path.exists(final_stereo_path):
-            audio_for_premium = final_stereo_path
-            logger.info(f"Using stereo audio for premium video: {os.path.basename(audio_for_premium)}")
-        else:
-            audio_for_premium = final_audio_path
-            logger.warning(
-                f"Stereo audio not found, using regular audio for premium video: {os.path.basename(audio_for_premium)}")
-
-        if not combine_video_and_audio(final_video_path_mute_premium, audio_for_premium, final_video_path_premium):
-            return {
-                "status": "error",
-                "message": f"Failed to create final video file",
-                "job_id": job_id,
-                "step": current_step
-            }
+    if os.path.exists(final_stereo_path):
+        new_audio_track = final_stereo_path
+        logger.warning(f"Stereo audio not found, using regular audio: {os.path.basename(new_audio_track)}")
     else:
-        logger.info("Regular user: combining standard mute video with audio (with ads)...")
+        new_audio_track = final_audio_path
 
-        if os.path.exists(final_stereo_with_ads):
-            audio_for_standard = final_stereo_with_ads
-            logger.info(f"Using stereo audio with ads: {os.path.basename(audio_for_standard)}")
-        elif os.path.exists(final_audio_with_ads):
-            audio_for_standard = final_audio_with_ads
-            logger.warning(
-                f"Stereo audio with ads not found, using regular audio with ads: {os.path.basename(audio_for_standard)}")
-        else:
-            return {
-                "status": "error",
-                "message": f"Failed to create final video file",
-                "job_id": job_id,
-                "step": current_step
-            }
-
-        if not combine_video_and_audio(final_video_path_mute, audio_for_standard, final_video_path):
-            return {
-                "status": "error",
-                "message": f"Failed to create final video file",
-                "job_id": job_id,
-                "step": current_step
-            }
-
-        logger.info("Regular user: combining premium mute video with clean audio...")
-
-        if os.path.exists(final_stereo_path):
-            audio_for_premium = final_stereo_path
-            logger.info(f"Using clean stereo audio for premium version: {os.path.basename(audio_for_premium)}")
-        else:
-            audio_for_premium = final_audio_path
-            logger.warning(f"Stereo audio not found, using regular clean audio: {os.path.basename(audio_for_premium)}")
-
-        if not combine_video_and_audio(final_video_path_mute_premium, audio_for_premium, final_video_path_premium):
-            return {
-                "status": "error",
-                "message": f"Failed to create final video file",
-                "job_id": job_id,
-                "step": current_step
-            }
+    if not combine_video_and_audio(tts_based_video_path, new_audio_track, final_video_path):
+        return {
+            "status": "error",
+            "message": f"Failed to create final video file",
+            "job_id": job_id,
+            "step": current_step
+        }
 
     logger.info(f"Video-audio combination completed!")
-    if is_premium:
-        logger.info(f"Premium video (with stereo): {final_video_path_premium}")
-    else:
-        logger.info(f"Video with ads (with stereo): {final_video_path}")
-        logger.info(f"Premium video (with stereo): {final_video_path_premium}")
+    logger.info(f"Final video: {final_video_path}")
 
     result = {
         "status": "success",
@@ -659,12 +589,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "translated": translated_path,
             "final_audio": final_audio_path,
             "final_audio_stereo": final_stereo_path,
-            "final_audio_with_ads": final_audio_with_ads,
-            "final_audio_stereo_with_ads": final_stereo_with_ads,
             "final_video": final_video_path,
-            "final_video_premium": final_video_path_premium,
-            "final_video_mute": final_video_path_mute,
-            "final_video_mute_premium": final_video_path_mute_premium
+            "final_video_tts_based": tts_based_video_path
+
         },
         "steps_completed": ["extract", "transcribe", "correct", "cleanup", "optimize", "adjust", "translate",
                             "tts", "auto-correct", "final_audio_files_creation", "process_video",
@@ -689,24 +616,11 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         (final_stereo_path,
          os.path.join(job_result_dir, os.path.basename(final_stereo_path))),
 
-        (final_video_path_premium,
-         os.path.join(job_result_dir, os.path.basename(final_video_path_premium))),
-        (final_video_path_mute_premium,
-         os.path.join(job_result_dir, os.path.basename(final_video_path_mute_premium)))
+        (final_video_path,
+         os.path.join(job_result_dir, os.path.basename(final_video_path))),
+        (tts_based_video_path,
+         os.path.join(job_result_dir, os.path.basename(tts_based_video_path)))
     ]
-
-    if not is_premium:
-        files_to_move.extend([
-            (final_video_path,
-             os.path.join(job_result_dir, os.path.basename(final_video_path))),
-            (final_video_path_mute,
-             os.path.join(job_result_dir, os.path.basename(final_video_path_mute))),
-
-            (final_audio_with_ads,
-             os.path.join(job_result_dir, os.path.basename(final_audio_with_ads))),
-            (final_stereo_with_ads,
-             os.path.join(job_result_dir, os.path.basename(final_stereo_with_ads)))
-        ])
 
     moved_files = []
     for src, dst in files_to_move:
@@ -720,20 +634,8 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     result["output_files"]["final_audio"] = os.path.join(job_result_dir, os.path.basename(final_audio_path))
     result["output_files"]["final_audio_stereo"] = os.path.join(job_result_dir, os.path.basename(final_stereo_path))
     result["output_files"]["translated"] = os.path.join(job_result_dir, os.path.basename(translated_path))
-    result["output_files"]["final_video_premium"] = os.path.join(job_result_dir,
-                                                                 os.path.basename(final_video_path_premium))
-    result["output_files"]["final_video_mute_premium"] = os.path.join(job_result_dir,
-                                                                      os.path.basename(final_video_path_mute_premium))
-
-    if not is_premium:
-        result["output_files"]["final_video"] = os.path.join(job_result_dir, os.path.basename(final_video_path))
-        result["output_files"]["final_video_mute"] = os.path.join(job_result_dir,
-                                                                  os.path.basename(final_video_path_mute))
-        result["output_files"]["final_audio_with_ads"] = os.path.join(job_result_dir,
-                                                                      os.path.basename(final_audio_with_ads))
-        result["output_files"]["final_audio_stereo_with_ads"] = os.path.join(job_result_dir,
-                                                                             os.path.basename(final_stereo_with_ads))
-
+    result["output_files"]["final_video"] = os.path.join(job_result_dir, os.path.basename(final_video_path))
+    result["output_files"]["final_video_tts_based"] = os.path.join(job_result_dir, os.path.basename(tts_based_video_path))
 
     with open(os.path.join(job_result_dir, "pipeline_result.json"), "w") as f:
         json.dump(result, f, indent=2)
@@ -746,7 +648,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     logger.info(f"JOB PROCESSING FINISHED SUCCESSFULLY!")
     logger.info(f"Job ID: {job_id}")
     logger.info(f"Original video: {video_path}")
-    logger.info(f"Final video: {final_video_path_mute}")
+    logger.info(f"Final video: {final_video_path}")
     logger.info(f"Total steps completed: {len(result['steps_completed'])}")
     logger.info("=================================================================")
 
@@ -763,7 +665,6 @@ def main():
     parser.add_argument("--tts_voice", required=True, help="Voice identifier for TTS")
     parser.add_argument("--elevenlabs_api_key", help="ElevenLabs API key (optional)")
     parser.add_argument("--openai_api_key", required=True, help="OpenAI API key")
-    parser.add_argument("--is_premium", action="store_true", help="User's subscription status")
 
     args = parser.parse_args()
 
@@ -781,7 +682,6 @@ def main():
         tts_voice=args.tts_voice,
         elevenlabs_api_key=args.elevenlabs_api_key,
         openai_api_key=args.openai_api_key,
-        is_premium=args.is_premium,
     )
 
     if result["status"] == "error":
