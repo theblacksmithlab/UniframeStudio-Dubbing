@@ -724,16 +724,17 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         else:
             logger.warning(f"Warning: File not found: {src}")
 
+    result["output_files"]["translated"] = os.path.join(job_result_dir, os.path.basename(translated_path))
     result["output_files"]["final_audio"] = os.path.join(job_result_dir, os.path.basename(final_audio_path))
     result["output_files"]["final_audio_stereo"] = os.path.join(job_result_dir, os.path.basename(final_stereo_path))
-    result["output_files"]["translated"] = os.path.join(job_result_dir, os.path.basename(translated_path))
     result["output_files"]["final_video"] = os.path.join(job_result_dir, os.path.basename(final_video_path))
-    result["output_files"]["final_video_tts_based"] = os.path.join(job_result_dir, os.path.basename(tts_based_video_path))
     result["output_files"]["final_audio_with_bg"] = os.path.join(job_result_dir, os.path.basename(mixed_audio_path))
     result["output_files"]["final_audio_stereo_with_bg"] = os.path.join(job_result_dir,
                                                                         os.path.basename(mixed_stereo_path))
     result["output_files"]["final_video_with_bg"] = os.path.join(job_result_dir,
                                                                  os.path.basename(final_video_with_bg_path))
+    result["output_files"]["final_video_tts_based"] = os.path.join(job_result_dir,
+                                                                   os.path.basename(tts_based_video_path))
 
     with open(os.path.join(job_result_dir, "pipeline_result.json"), "w") as f:
         json.dump(result, f, indent=2)

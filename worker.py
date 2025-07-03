@@ -71,7 +71,7 @@ def upload_results_to_s3(job_id: str) -> dict:
             "final_video": pipeline_result["output_files"]["final_video"],
             "final_video_tts_based": pipeline_result["output_files"]["final_video_tts_based"],
             "final_audio_with_bg": pipeline_result["output_files"]["final_audio_with_bg"],
-            "final_audio_stereo_with_bg": pipeline_result["out_put_files"]["final_audio_stereo_with_bg"],
+            "final_audio_stereo_with_bg": pipeline_result["output_files"]["final_audio_stereo_with_bg"],
             "final_video_with_bg": pipeline_result["output_files"]["final_video_with_bg"]
         }
     )
