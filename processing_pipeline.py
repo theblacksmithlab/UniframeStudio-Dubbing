@@ -509,7 +509,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
                         "--dealer", tts_provider,
                         "--voice", tts_voice,
                         "--attempts", "5",
-                        "--threshold", "0.2"]
+                        "--threshold", "0.25"]
 
     if tts_provider == "elevenlabs" and elevenlabs_api_key:
         auto_correct_cmd.extend(["--elevenlabs_api_key", elevenlabs_api_key])
