@@ -1,21 +1,32 @@
 #!/usr/bin/env python3
 """
-Исправленный скрипт для тестирования speaker diarization
+Рабочий скрипт для speaker diarization на основе официальной документации
 """
 
 import json
-import sys
+import torch
+import torchaudio
+import warnings
 from pathlib import Path
 import argparse
 
+# Отключаем предупреждения для чистого вывода
+warnings.filterwarnings("ignore")
 
-def test_diarization(audio_path: str, output_path: str = None, hf_token: str = None):
+
+def test_speaker_diarization(audio_path: str, token: str, output_path: str = None, num_speakers: int = None):
     """
-    Тестирует speaker diarization на аудио файле
+    Тестирует speaker diarization используя официальный API
+
+    Args:
+        audio_path: путь к аудио файлу
+        token: HuggingFace токен
+        output_path: путь для сохранения результата
+        num_speakers: количество спикеров (если известно)
     """
     try:
         from pyannote.audio import Pipeline
-        import torch
+        from pyannote.audio.pipelines.utils.hook import ProgressHook
 
         print(f"🎵 Обрабатываю аудио: {audio_path}")
 
@@ -23,46 +34,33 @@ def test_diarization(audio_path: str, output_path: str = None, hf_token: str = N
         if not Path(audio_path).exists():
             raise FileNotFoundError(f"Аудио файл не найден: {audio_path}")
 
-        # Список моделей для попытки загрузки
-        models_to_try = [
+        # Загружаем модель
+        print("📥 Загружаю модель speaker-diarization-3.1...")
+        pipeline = Pipeline.from_pretrained(
             "pyannote/speaker-diarization-3.1",
-            "pyannote/speaker-diarization",
-            "pyannote/speaker-diarization-3.0"
-        ]
+            use_auth_token=token
+        )
 
-        pipeline = None
-        successful_model = None
-
-        for model_name in models_to_try:
-            try:
-                print(f"📥 Пробую загрузить модель: {model_name}")
-                pipeline = Pipeline.from_pretrained(
-                    model_name,
-                    use_auth_token=hf_token
-                )
-                successful_model = model_name
-                print(f"✅ Модель {model_name} загружена успешно!")
-                break
-            except Exception as e:
-                print(f"❌ Не удалось загрузить {model_name}: {str(e)[:100]}...")
-                continue
-
-        if pipeline is None:
-            print("\n🔑 Все модели требуют авторизации или недоступны!")
-            print("1. Создайте токен: https://huggingface.co/settings/tokens")
-            print("2. Примите условия: https://huggingface.co/pyannote/speaker-diarization-3.1")
-            print("3. Попробуйте: python speaker-test.py audio.wav --token YOUR_TOKEN")
-            return None
-
-        # Устанавливаем GPU если доступен
+        # Отправляем на GPU если доступен
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        pipeline = pipeline.to(device)
+        pipeline.to(device)
         print(f"🔧 Используется устройство: {device}")
-        print(f"🚀 Используется модель: {successful_model}")
 
-        # Обрабатываем аудио
-        print("🔄 Анализирую спикеров... (это может занять время)")
-        diarization = pipeline(audio_path)
+        # Предзагружаем аудио для быстрой обработки
+        print("🔄 Загружаю аудио в память...")
+        waveform, sample_rate = torchaudio.load(audio_path)
+        audio_data = {"waveform": waveform, "sample_rate": sample_rate}
+
+        # Готовим параметры для diarization
+        diarization_params = {}
+        if num_speakers:
+            diarization_params["num_speakers"] = num_speakers
+            print(f"🎙️ Ожидаемое количество спикеров: {num_speakers}")
+
+        # Запускаем diarization с мониторингом прогресса
+        print("🔄 Анализирую спикеров...")
+        with ProgressHook() as hook:
+            diarization = pipeline(audio_data, hook=hook, **diarization_params)
 
         # Конвертируем результат в удобный формат
         speakers_timeline = []
@@ -78,77 +76,92 @@ def test_diarization(audio_path: str, output_path: str = None, hf_token: str = N
         speakers_timeline.sort(key=lambda x: x["start"])
 
         # Подготавливаем результат
+        speakers_found = sorted(list(set([s["speaker"] for s in speakers_timeline])))
+        total_duration = max([s["end"] for s in speakers_timeline]) if speakers_timeline else 0
+
         result = {
-            "model_used": successful_model,
-            "total_duration": max([s["end"] for s in speakers_timeline]) if speakers_timeline else 0,
-            "speakers_count": len(set([s["speaker"] for s in speakers_timeline])),
-            "speakers_found": sorted(list(set([s["speaker"] for s in speakers_timeline]))),
+            "audio_file": audio_path,
+            "model": "pyannote/speaker-diarization-3.1",
+            "total_duration": total_duration,
+            "speakers_count": len(speakers_found),
+            "speakers_found": speakers_found,
+            "total_segments": len(speakers_timeline),
             "timeline": speakers_timeline
         }
 
         # Выводим результат
         print("\n" + "=" * 60)
-        print("📊 РЕЗУЛЬТАТЫ АНАЛИЗА СПИКЕРОВ")
+        print("📊 РЕЗУЛЬТАТЫ SPEAKER DIARIZATION")
         print("=" * 60)
-        print(f"Модель: {successful_model}")
-        print(f"Общая продолжительность: {result['total_duration']:.2f} сек")
-        print(f"Количество спикеров: {result['speakers_count']}")
-        print(f"Найденные спикеры: {', '.join(result['speakers_found'])}")
+        print(f"Файл: {audio_path}")
+        print(f"Модель: pyannote/speaker-diarization-3.1")
+        print(f"Общая продолжительность: {total_duration:.2f} сек")
+        print(f"Количество спикеров: {len(speakers_found)}")
+        print(f"Найденные спикеры: {', '.join(speakers_found)}")
         print(f"Всего сегментов: {len(speakers_timeline)}")
-        print("\n📋 Временная разметка (первые 15 сегментов):")
-
-        for i, segment in enumerate(speakers_timeline[:15]):
-            print(f"  {i + 1:2d}. {segment['start']:7.2f}s - {segment['end']:7.2f}s "
-                  f"({segment['duration']:5.2f}s) | {segment['speaker']}")
-
-        if len(speakers_timeline) > 15:
-            print(f"  ... и ещё {len(speakers_timeline) - 15} сегментов")
 
         # Статистика по спикерам
         print(f"\n📈 Статистика по спикерам:")
-        for speaker in result['speakers_found']:
+        for speaker in speakers_found:
             speaker_segments = [s for s in speakers_timeline if s['speaker'] == speaker]
-            total_time = sum([s['duration'] for s in speaker_segments])
-            percentage = (total_time / result['total_duration']) * 100
-            print(f"  {speaker}: {total_time:.1f}s ({percentage:.1f}%) в {len(speaker_segments)} сегментах")
+            speaker_time = sum([s['duration'] for s in speaker_segments])
+            percentage = (speaker_time / total_duration) * 100 if total_duration > 0 else 0
+            print(f"  {speaker}: {speaker_time:.1f}s ({percentage:.1f}%) в {len(speaker_segments)} сегментах")
 
-        # Сохраняем результат в файл
+        # Показываем временную разметку
+        print(f"\n📋 Временная разметка (первые 20 сегментов):")
+        for i, segment in enumerate(speakers_timeline[:20]):
+            print(f"  {i + 1:2d}. {segment['start']:7.2f}s - {segment['end']:7.2f}s "
+                  f"({segment['duration']:5.2f}s) | {segment['speaker']}")
+
+        if len(speakers_timeline) > 20:
+            print(f"  ... и ещё {len(speakers_timeline) - 20} сегментов")
+
+        # Сохраняем результат
         if output_path:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(result, f, indent=2, ensure_ascii=False)
-            print(f"\n💾 Результат сохранён в: {output_path}")
+            print(f"\n💾 JSON результат сохранён в: {output_path}")
+
+        # Также сохраняем в RTTM формате (стандарт для diarization)
+        rttm_path = Path(audio_path).with_suffix('.rttm')
+        with open(rttm_path, "w") as rttm:
+            diarization.write_rttm(rttm)
+        print(f"📄 RTTM результат сохранён в: {rttm_path}")
 
         return result
 
-    except ImportError as e:
-        print(f"❌ Ошибка импорта: {e}")
-        print("Установите зависимости: pip install pyannote.audio torch torchaudio")
-        return None
-
     except Exception as e:
-        print(f"❌ Ошибка обработки: {e}")
+        print(f"❌ Ошибка: {e}")
         import traceback
         traceback.print_exc()
         return None
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Тест speaker diarization (исправленная версия)")
+    parser = argparse.ArgumentParser(description="Speaker Diarization с официальным API")
     parser.add_argument("audio_path", help="Путь к аудио файлу")
+    parser.add_argument("--token", required=True, help="HuggingFace токен")
     parser.add_argument("-o", "--output", help="Путь для сохранения JSON результата")
-    parser.add_argument("--token", help="HuggingFace токен для авторизации")
+    parser.add_argument("--speakers", type=int, help="Ожидаемое количество спикеров")
 
     args = parser.parse_args()
 
     # Тестируем diarization
-    result = test_diarization(args.audio_path, args.output, args.token)
+    result = test_speaker_diarization(
+        audio_path=args.audio_path,
+        token=args.token,
+        output_path=args.output,
+        num_speakers=args.speakers
+    )
 
     if result:
-        print("\n✅ Тест завершён успешно!")
-        print("\n🔗 Теперь можно интегрировать это в ваш python-dubbing-service")
-        print("💡 Результат содержит временные метки для каждого спикера")
+        print("\n✅ Анализ завершён успешно!")
+        print(f"📊 Найдено {result['speakers_count']} спикеров в {result['total_segments']} сегментах")
+        print("\n🔗 Теперь можете интегрировать это в ваш python-dubbing-service")
+        print("💡 Результат содержит точные временные метки для каждого спикера")
     else:
-        print("\n❌ Тест завершён с ошибкой")
+        print("\n❌ Анализ завершён с ошибкой")
 
 
 if __name__ == "__main__":
