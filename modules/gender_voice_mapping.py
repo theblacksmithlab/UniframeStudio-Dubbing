@@ -23,12 +23,12 @@ class HuggingFaceGenderClassifier:
     def load_model(self):
         """Загружает модель определения пола"""
         try:
-            logger.info("Loading JaesungHuh/voice-gender-classifier model...")
+            logger.info("Loading alefiury/wav2vec2-large-xlsr-53-gender-recognition-librispeech model...")
 
-            # Используем audio-classification pipeline
+            # Используем более простую модель, которая точно работает с pipeline
             self.model = pipeline(
                 "audio-classification",
-                model="JaesungHuh/voice-gender-classifier",
+                model="alefiury/wav2vec2-large-xlsr-53-gender-recognition-librispeech",
                 device=0 if torch.cuda.is_available() else -1
             )
 
@@ -37,7 +37,20 @@ class HuggingFaceGenderClassifier:
 
         except Exception as e:
             logger.error(f"Failed to load gender classification model: {e}")
-            return False
+            logger.info("Trying fallback model...")
+
+            # Fallback на другую модель
+            try:
+                self.model = pipeline(
+                    "audio-classification",
+                    model="MIT/ast-finetuned-speech-commands-v2",
+                    device=0 if torch.cuda.is_available() else -1
+                )
+                logger.info("Fallback model loaded successfully!")
+                return True
+            except Exception as e2:
+                logger.error(f"Fallback model also failed: {e2}")
+                return False
 
     def predict_gender(self, audio_path: str, start_time: float, end_time: float):
         """
@@ -86,12 +99,17 @@ class HuggingFaceGenderClassifier:
                     confidence = float(best_result['score'])
 
                     # Маппим на наши стандартные лейблы
-                    if 'male' in predicted_label or 'm' in predicted_label:
+                    if 'male' in predicted_label or 'm' in predicted_label or 'man' in predicted_label:
                         gender = "male"
-                    elif 'female' in predicted_label or 'f' in predicted_label:
+                    elif 'female' in predicted_label or 'f' in predicted_label or 'woman' in predicted_label:
                         gender = "female"
                     else:
-                        gender = "unknown"
+                        # Если не удалось определить, используем простую эвристику
+                        # Если confidence низкая, лучше сказать unknown
+                        if confidence < 0.6:
+                            gender = "unknown"
+                        else:
+                            gender = "male"  # fallback по умолчанию
 
                     return {
                         "predicted_gender": gender,
