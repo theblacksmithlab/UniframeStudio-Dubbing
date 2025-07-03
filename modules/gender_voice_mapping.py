@@ -4,7 +4,7 @@ import tempfile
 import torch
 import librosa
 import soundfile as sf
-from model import ECAPA_gender
+from modules.model import ECAPA_gender
 from utils.logger_config import setup_logger
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
