@@ -142,11 +142,7 @@ async def start_video_processing(request: ProcessVideoRequest):
     with open(f"jobs/{request.job_id}/pending", "w") as f:
         f.write(datetime.now().isoformat())
 
-    logger.info("START 1!")
-
     subprocess.Popen([sys.executable, "worker.py", "--job_id", request.job_id])
-
-    logger.info("START 2!")
 
     return JobStatus(
         job_id=request.job_id,

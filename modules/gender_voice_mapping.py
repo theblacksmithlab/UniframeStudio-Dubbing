@@ -4,16 +4,14 @@ import tempfile
 import torch
 import librosa
 import soundfile as sf
-from modules.model import ECAPA_gender
+from modules.voice_gender_classifier_model import ECAPA_gender
 from utils.logger_config import setup_logger
+from typing import Optional, Dict, Any
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 class JaesungGenderClassifier:
-    """
-    Классификатор пола на основе JaesungHuh/voice-gender-classifier
-    """
 
     def __init__(self):
         self.model = None
@@ -21,11 +19,9 @@ class JaesungGenderClassifier:
         logger.info(f"Initializing JaesungHuh gender classifier on device: {self.device}")
 
     def load_model(self):
-        """Загружает модель JaesungHuh"""
         try:
             logger.info("Loading JaesungHuh/voice-gender-classifier model...")
 
-            # Загружаем модель точно как в их примере
             self.model = ECAPA_gender.from_pretrained("JaesungHuh/voice-gender-classifier")
             self.model.eval()
             self.model.to(self.device)
@@ -37,46 +33,37 @@ class JaesungGenderClassifier:
             logger.error(f"Failed to load JaesungHuh gender classification model: {e}")
             return False
 
-    def predict_gender(self, audio_path: str, start_time: float, end_time: float):
-        """
-        Предсказывает пол для аудио сегмента
-        """
+    def predict_gender(self, audio_path: str, start_time: float, end_time: float) -> Optional[Dict[str, Any]]:
         try:
             if self.model is None:
                 if not self.load_model():
                     return None
 
-            # Загружаем и обрезаем аудио
             audio, sr = librosa.load(audio_path, sr=16000)
 
             start_sample = int(start_time * sr)
             end_sample = int(end_time * sr)
             segment = audio[start_sample:end_sample]
 
-            # Проверяем длину сегмента
             if len(segment) < sr * 0.1:
                 return None
 
-            # Создаем временный файл для сегмента
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
                 sf.write(temp_file.name, segment, sr)
                 temp_path = temp_file.name
 
             try:
-                # Получаем предсказание точно как в их примере
                 with torch.no_grad():
                     output = self.model.predict(temp_path, device=self.device)
 
                 logger.info(f"Model output: {output}")
 
-                # Обрабатываем результат
                 if output:
                     gender_str = str(output).lower().strip()
 
-                    # Определяем пол и уверенность
                     if 'male' in gender_str and 'female' not in gender_str:
                         gender = "male"
-                        confidence = 0.85  # Высокая уверенность для четкого ответа
+                        confidence = 0.85
                     elif 'female' in gender_str:
                         gender = "female"
                         confidence = 0.85
@@ -94,7 +81,6 @@ class JaesungGenderClassifier:
                     return None
 
             finally:
-                # Удаляем временный файл
                 if os.path.exists(temp_path):
                     os.unlink(temp_path)
 
@@ -104,7 +90,6 @@ class JaesungGenderClassifier:
 
 
 def get_simple_voice_mapping(gender: str):
-    """Простой маппинг пола на голос OpenAI"""
     if gender == "male":
         return "onyx"
     elif gender == "female":
@@ -114,15 +99,11 @@ def get_simple_voice_mapping(gender: str):
 
 
 def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_path: str):
-    """
-    Добавляет анализ пола с помощью JaesungHuh модели
-    """
     try:
         logger.info(f"Adding JaesungHuh gender analysis and OpenAI voice mapping...")
         logger.info(f"Audio file: {audio_path}")
         logger.info(f"Translation file: {translated_json_path}")
 
-        # Проверяем наличие файлов
         if not os.path.exists(audio_path):
             logger.error(f"Audio file not found: {audio_path}")
             return False
@@ -131,7 +112,6 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
             logger.error(f"Translation file not found: {translated_json_path}")
             return False
 
-        # Загружаем JSON с переводом
         with open(translated_json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
@@ -142,21 +122,18 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
 
         logger.info(f"Found {len(segments)} segments to analyze")
 
-        # Инициализируем классификатор
         gender_classifier = JaesungGenderClassifier()
 
-        # Анализируем каждый сегмент
         successful_analyses = 0
         voice_stats = {}
 
         for i, segment in enumerate(segments):
-            if i % 5 == 0:  # Чаще логируем чтобы видеть прогресс
+            if i % 5 == 0:
                 logger.info(f"Processing segment {i + 1}/{len(segments)}")
 
             start_time = segment.get("start", 0)
             end_time = segment.get("end", 0)
 
-            # Анализируем пол
             analysis = gender_classifier.predict_gender(audio_path, start_time, end_time)
 
             if analysis:
@@ -177,11 +154,9 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
                 segment["suggested_voice"] = "onyx"
                 logger.warning(f"Segment {i + 1}: failed to analyze")
 
-        # Сохраняем результат
         with open(translated_json_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
-        # Логируем финальную статистику
         gender_stats = {}
         for segment in segments:
             gender = segment.get("predicted_gender", "unknown")
@@ -202,9 +177,6 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
 
 
 def run_gender_and_voice_analysis_step(job_id, audio_path, translated_json_path, tts_provider):
-    """
-    Запускает анализ пола с JaesungHuh моделью для OpenAI TTS
-    """
     try:
         if tts_provider != "openai":
             logger.info(f"Skipping gender/voice analysis for TTS provider: {tts_provider}")
