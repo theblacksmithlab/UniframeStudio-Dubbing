@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+"""
+Базовый скрипт для тестирования speaker diarization
+Использует PyAnnote.audio для определения спикеров в аудио файле
+"""
+
 import json
 import sys
 from pathlib import Path
@@ -10,6 +16,8 @@ def install_requirements():
 
     packages = [
         "pyannote.audio",
+        "torch",
+        "torchaudio"
     ]
 
     for package in packages:
@@ -21,13 +29,14 @@ def install_requirements():
             subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 
 
-def test_diarization(audio_path: str, output_path: str = None):
+def test_diarization(audio_path: str, output_path: str = None, hf_token: str = None):
     """
     Тестирует speaker diarization на аудио файле
 
     Args:
         audio_path: путь к аудио файлу
         output_path: путь для сохранения результата (опционально)
+        hf_token: HuggingFace токен для доступа к моделям
     """
     try:
         from pyannote.audio import Pipeline
@@ -39,12 +48,33 @@ def test_diarization(audio_path: str, output_path: str = None):
         if not Path(audio_path).exists():
             raise FileNotFoundError(f"Аудио файл не найден: {audio_path}")
 
-        # Загружаем предобученную модель
-        print("📥 Загружаю модель speaker diarization...")
-        pipeline = Pipeline.from_pretrained(
+        # Список моделей для попытки загрузки
+        models_to_try = [
             "pyannote/speaker-diarization-3.1",
-            use_auth_token=None  # Может потребоваться HuggingFace токен
-        )
+            "pyannote/speaker-diarization",
+            "pyannote/speaker-diarization-3.0"
+        ]
+
+        pipeline = None
+        for model_name in models_to_try:
+            try:
+                print(f"📥 Пробую загрузить модель: {model_name}")
+                pipeline = Pipeline.from_pretrained(
+                    model_name,
+                    use_auth_token=hf_token
+                )
+                print(f"✅ Модель {model_name} загружена успешно!")
+                break
+            except Exception as e:
+                print(f"❌ Не удалось загрузить {model_name}: {e}")
+                continue
+
+        if pipeline is None:
+            print("\n🔑 Все модели требуют авторизации!")
+            print("Создайте токен на https://huggingface.co/settings/tokens")
+            print("И примите условия на https://huggingface.co/pyannote/speaker-diarization-3.1")
+            print("Затем запустите: python speaker-test.py audio.wav --token YOUR_TOKEN")
+            return None
 
         # Устанавливаем GPU если доступен
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -115,6 +145,7 @@ def main():
     parser = argparse.ArgumentParser(description="Тест speaker diarization")
     parser.add_argument("audio_path", help="Путь к аудио файлу")
     parser.add_argument("-o", "--output", help="Путь для сохранения JSON результата")
+    parser.add_argument("--token", help="HuggingFace токен для авторизации")
     parser.add_argument("--install", action="store_true", help="Установить зависимости")
 
     args = parser.parse_args()
@@ -124,7 +155,7 @@ def main():
         return
 
     # Тестируем diarization
-    result = test_diarization(args.audio_path, args.output)
+    result = test_diarization(args.audio_path, args.output, args.token)
 
     if result:
         print("\n✅ Тест завершён успешно!")
