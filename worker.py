@@ -61,20 +61,23 @@ def upload_results_to_s3(job_id: str) -> dict:
     s3_client = boto3.client("s3")
     result_urls = {}
 
-    files_to_upload = {}
+    files_to_upload = {
+        "translated": pipeline_result["output_files"]["translated"],
+        "audio": pipeline_result["output_files"]["final_audio"],
+        "audio_stereo": pipeline_result["output_files"]["final_audio_stereo"],
+        "final_video": pipeline_result["output_files"]["final_video"],
+        "final_video_tts_based": pipeline_result["output_files"]["final_video_tts_based"]
+    }
 
-    files_to_upload.update(
-        {
-            "translated": pipeline_result["output_files"]["translated"],
-            "audio": pipeline_result["output_files"]["final_audio"],
-            "audio_stereo": pipeline_result["output_files"]["final_audio_stereo"],
-            "final_video": pipeline_result["output_files"]["final_video"],
-            "final_video_tts_based": pipeline_result["output_files"]["final_video_tts_based"],
-            "final_audio_with_bg": pipeline_result["output_files"]["final_audio_with_bg"],
-            "final_audio_stereo_with_bg": pipeline_result["output_files"]["final_audio_stereo_with_bg"],
-            "final_video_with_bg": pipeline_result["output_files"]["final_video_with_bg"]
-        }
-    )
+    bg_files = {
+        "final_audio_with_bg": pipeline_result["output_files"].get("final_audio_with_bg"),
+        "final_audio_stereo_with_bg": pipeline_result["output_files"].get("final_audio_stereo_with_bg"),
+        "final_video_with_bg": pipeline_result["output_files"].get("final_video_with_bg")
+    }
+
+    for key, path in bg_files.items():
+        if path:
+            files_to_upload[key] = path
 
     for file_type, local_path in files_to_upload.items():
         if local_path and os.path.exists(local_path):
@@ -85,12 +88,12 @@ def upload_results_to_s3(job_id: str) -> dict:
                 logger.info(f"Uploading {file_type} to S3: {s3_key}")
                 s3_client.upload_file(local_path, s3_bucket, s3_key)
                 result_urls[file_type] = f"s3://{s3_bucket}/{s3_key}"
-                logger.info(
-                    f"Successfully uploaded {file_type} to {result_urls[file_type]}"
-                )
+                logger.info(f"Successfully uploaded {file_type} to {result_urls[file_type]}")
             except ClientError as e:
                 logger.error(f"Error uploading {file_type} to S3: {e}")
                 continue
+        else:
+            logger.warning(f"File {file_type} not found or path is None: {local_path}")
 
     return result_urls
 

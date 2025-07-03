@@ -26,9 +26,9 @@ def adjust_segments_timing(file_path, output_file=None):
             old_end = segments[i]['end']
             segments[i]['end'] = next_start
             adjusted_count += 1
-            logger.warning(f"Adjusted segment {i}: end time {old_end:.3f}s -> {next_start:.3f}s (gap was {gap:.3f}s)")
+            logger.info(f"Adjusted segment {i}: end time {old_end:.3f}s -> {next_start:.3f}s (gap was {gap:.3f}s)")
         else:
-            logger.warning(f"Segment {i}: keeping gap of {gap:.3f}s")
+            logger.info(f"Segment {i}: keeping gap of {gap:.3f}s")
 
     logger.info(f"Timing adjustment complete. {adjusted_count} segments adjusted.")
 

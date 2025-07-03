@@ -24,7 +24,7 @@ STEP_DESCRIPTIONS = {
     11: "Generating TTS segments...",
     12: "Auto-correcting segment durations...",
     13: "Processing background audio...",
-    14: "Creating all audio files...",
+    14: "Mixing down audio files...",
     15: "Processing video with new audio...",
     16: "Creating final video with stereo audio...",
     17: "Uploading results to S3 storage...",
