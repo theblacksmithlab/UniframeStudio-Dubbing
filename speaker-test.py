@@ -1,8 +1,4 @@
-#!/usr/bin/env python3
-"""
-Улучшенное определение пола с использованием нескольких признаков
-"""
-
+# test!
 import json
 import librosa
 import numpy as np
