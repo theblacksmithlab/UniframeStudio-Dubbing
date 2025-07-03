@@ -154,13 +154,24 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
 
                 segment_audio_file = os.path.join(segments_dir, f"segment_{segment_id}.mp3")
 
-                logger.info(f"Regenerating audio for segment {segment_id}...")
+                if dealer.lower() == "openai":
+                    segment_voice = segment.get("suggested_voice", voice)
+                    if segment_voice != voice:
+                        logger.info(
+                            f"Using dynamic voice '{segment_voice}' for segment {segment_id} correction (gender: {segment.get('predicted_gender', 'unknown')})")
+                    else:
+                        logger.info(f"Using fallback voice '{voice}' for segment {segment_id} correction")
+                else:
+                    segment_voice = voice
+                    logger.info(f"Using ElevenLabs voice '{voice}' for segment {segment_id} correction")
+
+                logger.info(f"Regenerating audio for segment {segment_id} with voice: {segment_voice}")
                 result = regenerate_segment(
                     translation_file,
                     job_id,
                     segment_id,
                     output_audio_file=segment_audio_file,
-                    voice=voice,
+                    voice=segment_voice,
                     dealer=dealer,
                     elevenlabs_api_key=elevenlabs_api_key,
                     openai_api_key=openai_api_key,
@@ -217,5 +228,23 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
             logger.info(f"  - Segment {issue['id']}: {issue['start']:.2f}s - {issue['end']:.2f}s")
             logger.info(f"    Original: {issue['original_duration']:.3f}s, TTS: {issue['tts_duration']:.3f}s")
             logger.info(f"    Difference: {issue['diff_percentage']:.1f}%")
+
+    if dealer.lower() == "openai":
+        correction_voice_stats = {}
+        total_corrections = len(segments_needing_correction) if 'segments_needing_correction' in locals() else 0
+
+        if total_corrections > 0:
+            logger.info("=" * 50)
+            logger.info("SEGMENT CORRECTION VOICE STATISTICS")
+            logger.info("=" * 50)
+
+            for segment_data in segments_needing_correction:
+                segment = segment_data["segment"]
+                used_voice = segment.get("suggested_voice", voice)
+                correction_voice_stats[used_voice] = correction_voice_stats.get(used_voice, 0) + 1
+
+            for voice_name, count in correction_voice_stats.items():
+                percentage = (count / total_corrections) * 100
+                logger.info(f"Corrections with voice '{voice_name}': {count}/{total_corrections} ({percentage:.1f}%)")
 
     return translation_file

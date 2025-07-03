@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Определение пола с настроенными порогами для лучшего распознавания женских голосов
-"""
-
 import json
 import librosa
 import numpy as np

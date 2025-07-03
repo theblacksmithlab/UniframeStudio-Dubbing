@@ -64,16 +64,25 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
         original_duration_sec = round(segment["end"] - segment["start"], 6)
         data["segments"][i]["original_duration"] = original_duration_sec
 
+        if dealer.lower() == "openai":
+            segment_voice = segment.get("suggested_voice", voice)
+            if segment_voice != voice:
+                logger.info(
+                    f"Using dynamic voice '{segment_voice}' for segment {i + 1} (gender: {segment.get('predicted_gender', 'unknown')})")
+        else:
+            segment_voice = voice
+
         logger.info(f"Processing segment {i + 1}/{len(segments)}: '{text[:30]}...'")
         logger.info(
             f"Start: {segment['start']}s, End: {segment['end']}s, Target Duration: {original_duration_ms / 1000}s")
+        logger.info(f"Voice: {segment_voice}")
 
         segment_file = os.path.join(segments_dir, f"segment_{i}.mp3")
         temp_file = os.path.join(temp_dir, f"segment_{i}.mp3")
 
         try:
             if dealer.lower() == "openai":
-                generate_openai_tts_with_retry(openai_client, text, voice, temp_file)
+                generate_openai_tts_with_retry(openai_client, text, segment_voice, temp_file)
 
             elif dealer.lower() == "elevenlabs":
                 previous_text = ""
@@ -213,6 +222,37 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
     except Exception as e:
         logger.error(f"Error saving updated data to file: {e}")
         return None
+
+    if dealer.lower() == "openai":
+        voice_usage_stats = {}
+        gender_stats = {}
+
+        for segment in segments:
+            used_voice = segment.get("suggested_voice", voice)
+            predicted_gender = segment.get("predicted_gender", "unknown")
+
+            voice_usage_stats[used_voice] = voice_usage_stats.get(used_voice, 0) + 1
+            gender_stats[predicted_gender] = gender_stats.get(predicted_gender, 0) + 1
+
+        logger.info("=" * 50)
+        logger.info("OPENAI TTS VOICE USAGE STATISTICS")
+        logger.info("=" * 50)
+
+        total_segments = len([s for s in segments if s.get("translated_text", "").strip()])
+
+        for voice_name, count in voice_usage_stats.items():
+            percentage = (count / total_segments) * 100 if total_segments > 0 else 0
+            logger.info(f"Voice '{voice_name}': {count} segments ({percentage:.1f}%)")
+
+        logger.info(f"\nGender distribution:")
+        for gender, count in gender_stats.items():
+            percentage = (count / total_segments) * 100 if total_segments > 0 else 0
+            logger.info(f"  {gender}: {count} segments ({percentage:.1f}%)")
+
+        segments_without_analysis = len([s for s in segments if not s.get("suggested_voice")])
+        if segments_without_analysis > 0:
+            logger.warning(
+                f"Found {segments_without_analysis} segments without voice analysis - using fallback voice '{voice}'")
 
     logger.info(f"TTS generation completed successfully!")
     logger.info(f"Individual segments saved in: {segments_dir}")

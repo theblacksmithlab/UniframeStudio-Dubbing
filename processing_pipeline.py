@@ -7,7 +7,9 @@ import subprocess
 import sys
 
 from modules.audio_processor import AudioProcessor
+from modules.gender_voice_mapping import run_gender_and_voice_analysis_step
 from modules.job_status import update_job_status
+from modules.video_to_audio_conversion import extract_audio
 from utils.logger_config import setup_logger
 from utils.transcription_review import get_review_result
 
@@ -377,6 +379,49 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         }
 
     # logger.info(f"Segments translation file created: {translated_path}")
+
+    # [Step 7.5] Gender Analysis & Voice Mapping (только для OpenAI TTS)
+    if tts_provider == "openai":
+        current_step = 9
+        update_job_status(job_id=job_id, step=current_step)
+        logger.info(f"{'=' * 25}")
+        logger.info(f"[Step 7.5] Adding gender analysis and OpenAI voice mapping...")
+
+        # Определяем путь к оригинальному аудио с fallback
+        original_audio_path = os.path.join(audio_input_dir, f"{base_name}.mp3")
+
+        # НОВОЕ: Проверяем существование аудио файла
+        if not os.path.exists(original_audio_path):
+            logger.warning(f"Audio file not found at {original_audio_path}")
+            logger.info(f"Extracting audio from video: {video_path}")
+
+            try:
+                # Извлекаем аудио из видео как fallback
+                extracted_audio_path = extract_audio(video_path, original_audio_path)
+                logger.info(f"Audio successfully extracted to: {extracted_audio_path}")
+            except Exception as e:
+                logger.error(f"Failed to extract audio: {e}")
+                return {
+                    "status": "error",
+                    "message": f"Failed to extract audio for gender analysis: {str(e)}",
+                    "job_id": job_id,
+                    "step": current_step
+                }
+        else:
+            logger.info(f"Using existing audio file: {original_audio_path}")
+
+        # Запускаем анализ пола и маппинг голосов
+        if not run_gender_and_voice_analysis_step(job_id, original_audio_path, translated_path, tts_provider):
+            return {
+                "status": "error",
+                "message": "Failed to analyze gender and map voices",
+                "job_id": job_id,
+                "step": current_step
+            }
+
+        logger.info(f"Gender analysis and voice mapping completed for: {translated_path}")
+    else:
+        logger.info(f"Skipping gender/voice analysis for TTS provider: {tts_provider}")
 
     # [review step]
     logger.info(f"{'=' * 25}")
