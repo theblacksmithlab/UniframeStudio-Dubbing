@@ -170,7 +170,7 @@ def get_sentence_timestamps_with_llm(sentence, segment, words_list, openai_api_k
     return {"start": final_start, "end": final_end}
 
 
-def optimize_transcription_segments(transcription_file, output_file=None, min_segment_length=60,
+def optimize_transcription_segments(transcription_file, output_file=None, min_segment_length=30,
                                     openai_api_key=None, model="gpt-4o-mini"):
     if not openai_api_key:
         raise ValueError("OpenAI API key is required for LLM-powered segmentation but not provided")

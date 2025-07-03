@@ -155,12 +155,17 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
                 segment_audio_file = os.path.join(segments_dir, f"segment_{segment_id}.mp3")
 
                 if dealer.lower() == "openai":
-                    segment_voice = segment.get("suggested_voice", voice)
-                    if segment_voice != voice:
+                    suggested_voice = segment.get("suggested_voice")
+                    confidence = segment.get("gender_confidence", 0)
+
+                    if suggested_voice:
+                        segment_voice = suggested_voice
                         logger.info(
-                            f"Using dynamic voice '{segment_voice}' for segment {segment_id} correction (gender: {segment.get('predicted_gender', 'unknown')})")
+                            f"Using analyzed voice '{segment_voice}' for segment {segment_id} correction (gender: {segment.get('predicted_gender', 'unknown')}, confidence: {confidence:.2f})")
                     else:
-                        logger.info(f"Using fallback voice '{voice}' for segment {segment_id} correction")
+                        segment_voice = voice
+                        logger.info(
+                            f"Using fallback voice '{voice}' for segment {segment_id} correction (no voice analysis)")
                 else:
                     segment_voice = voice
                     logger.info(f"Using ElevenLabs voice '{voice}' for segment {segment_id} correction")
