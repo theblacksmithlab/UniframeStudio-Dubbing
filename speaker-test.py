@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 """
-Альтернативный скрипт с моделью pyannote/speaker-diarization (без версии)
+Надежный скрипт для speaker diarization с правильной обработкой ошибок
 """
 
 import json
 import torch
-import torchaudio
 import warnings
 from pathlib import Path
 import argparse
+import sys
+import os
 
-# Отключаем предупреждения
+# Отключаем все предупреждения
 warnings.filterwarnings("ignore")
+os.environ['PYTHONWARNINGS'] = 'ignore'
 
 
-def test_speaker_diarization_alternative(audio_path: str, token: str, output_path: str = None):
+def test_speaker_diarization_robust(audio_path: str, token: str, output_path: str = None):
     """
-    Тестирует speaker diarization с базовой моделью
+    Надежный тест speaker diarization
     """
+    pipeline = None
+
     try:
         from pyannote.audio import Pipeline
 
@@ -27,14 +31,45 @@ def test_speaker_diarization_alternative(audio_path: str, token: str, output_pat
         if not Path(audio_path).exists():
             raise FileNotFoundError(f"Аудио файл не найден: {audio_path}")
 
-        # Пробуем загрузить базовую модель (которая у вас уже работала)
-        print("📥 Загружаю модель pyannote/speaker-diarization...")
-        pipeline = Pipeline.from_pretrained(
+        # Пробуем разные модели
+        models = [
+            "pyannote/speaker-diarization-3.1",
             "pyannote/speaker-diarization",
-            use_auth_token=token
-        )
+            "pyannote/speaker-diarization-3.0"
+        ]
 
-        print("✅ Модель загружена успешно!")
+        for model_name in models:
+            print(f"📥 Пробую загрузить: {model_name}")
+
+            try:
+                # Подавляем stderr во время загрузки
+                import contextlib
+                with contextlib.redirect_stderr(open(os.devnull, 'w')):
+                    pipeline = Pipeline.from_pretrained(
+                        model_name,
+                        use_auth_token=token
+                    )
+
+                # Проверяем что pipeline действительно загрузился
+                if pipeline is not None:
+                    print(f"✅ Модель {model_name} загружена успешно!")
+                    break
+                else:
+                    print(f"❌ Модель {model_name} вернула None")
+
+            except Exception as e:
+                print(f"❌ Ошибка загрузки {model_name}: {str(e)[:100]}...")
+                pipeline = None
+                continue
+
+        # Финальная проверка
+        if pipeline is None:
+            print("\n❌ Не удалось загрузить ни одну модель!")
+            print("Проверьте:")
+            print("1. Авторизацию: huggingface-cli login")
+            print("2. Принятие условий на сайте HuggingFace")
+            print("3. Права доступа токена")
+            return None
 
         # Отправляем на GPU если доступен
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -42,7 +77,7 @@ def test_speaker_diarization_alternative(audio_path: str, token: str, output_pat
         print(f"🔧 Используется устройство: {device}")
 
         # Запускаем анализ
-        print("🔄 Анализирую спикеров... (это может занять несколько минут)")
+        print("🔄 Анализирую спикеров... (это займет время)")
         diarization = pipeline(audio_path)
 
         print("✅ Анализ завершён! Обрабатываю результаты...")
@@ -66,7 +101,7 @@ def test_speaker_diarization_alternative(audio_path: str, token: str, output_pat
 
         result = {
             "audio_file": audio_path,
-            "model": "pyannote/speaker-diarization",
+            "model_used": model_name,
             "total_duration": total_duration,
             "speakers_count": len(speakers_found),
             "speakers_found": speakers_found,
@@ -79,7 +114,7 @@ def test_speaker_diarization_alternative(audio_path: str, token: str, output_pat
         print("📊 РЕЗУЛЬТАТЫ SPEAKER DIARIZATION")
         print("=" * 60)
         print(f"Файл: {audio_path}")
-        print(f"Модель: pyannote/speaker-diarization")
+        print(f"Модель: {model_name}")
         print(f"Общая продолжительность: {total_duration:.2f} сек")
         print(f"Количество спикеров: {len(speakers_found)}")
         print(f"Найденные спикеры: {', '.join(speakers_found)}")
@@ -111,14 +146,14 @@ def test_speaker_diarization_alternative(audio_path: str, token: str, output_pat
         return result
 
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        print(f"❌ Критическая ошибка: {e}")
         import traceback
         traceback.print_exc()
         return None
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Speaker Diarization (альтернативная модель)")
+    parser = argparse.ArgumentParser(description="Надежный Speaker Diarization тест")
     parser.add_argument("audio_path", help="Путь к аудио файлу")
     parser.add_argument("--token", required=True, help="HuggingFace токен")
     parser.add_argument("-o", "--output", help="Путь для сохранения JSON результата")
@@ -126,7 +161,7 @@ def main():
     args = parser.parse_args()
 
     # Тестируем diarization
-    result = test_speaker_diarization_alternative(
+    result = test_speaker_diarization_robust(
         audio_path=args.audio_path,
         token=args.token,
         output_path=args.output
@@ -135,7 +170,7 @@ def main():
     if result:
         print("\n✅ Анализ завершён успешно!")
         print(f"📊 Найдено {result['speakers_count']} спикеров в {result['total_segments']} сегментах")
-        print("\n🔗 Результат готов для интеграции в ваш python-dubbing-service")
+        print("\n🔗 Результат готов для интеграции!")
     else:
         print("\n❌ Анализ завершён с ошибкой")
 
