@@ -82,7 +82,7 @@ class AudioProcessor:
                 '-ss', str(initial_gap_start),
                 '-to', str(initial_gap_end),
                 '-acodec', 'mp3',
-                '-b:a', '192k',
+                '-b:a', '320k',
                 str(initial_gap_path)
             ]
             self._run_command(cmd)
@@ -101,7 +101,7 @@ class AudioProcessor:
                 '-ss', str(start),
                 '-to', str(end),
                 '-acodec', 'mp3',
-                '-b:a', '192k',
+                '-b:a', '320k',
                 str(output_path)
             ]
             self._run_command(cmd)
@@ -122,7 +122,7 @@ class AudioProcessor:
                         '-ss', str(gap_start),
                         '-to', str(gap_end),
                         '-acodec', 'mp3',
-                        '-b:a', '192k',
+                        '-b:a', '320k',
                         str(gap_path)
                     ]
                     self._run_command(cmd)
@@ -141,7 +141,7 @@ class AudioProcessor:
                 '-ss', str(final_gap_start),
                 '-to', str(final_gap_end),
                 '-acodec', 'mp3',
-                '-b:a', '192k',
+                '-b:a', '320k',
                 str(final_gap_path)
             ]
             self._run_command(cmd)
@@ -187,7 +187,7 @@ class AudioProcessor:
                     '-i', str(input_path),
                     '-filter:a', filter_chain,
                     '-acodec', 'mp3',
-                    '-b:a', '192k',
+                    '-b:a', '320k',
                     str(output_path)
                 ]
 
@@ -254,7 +254,7 @@ class AudioProcessor:
             '-safe', '0',
             '-i', str(concat_file),
             '-acodec', 'mp3',
-            '-b:a', '192k',
+            '-b:a', '320k',
             str(background_audio_path)
         ]
         self._run_command(cmd)
