@@ -1,5 +1,4 @@
 import os
-import json
 import subprocess
 from pathlib import Path
 import shutil
@@ -8,16 +7,16 @@ from utils.logger_config import setup_logger
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 class AudioProcessor:
-    def __init__(self, job_id, input_video_path, segments_data):
+    def __init__(self, job_id, input_audio_path, segments_data):
         """
         Обработчик аудио для создания фоновой подложки
 
         :param job_id: ID задачи
-        :param input_video_path: Путь к исходному видео
+        :param input_audio_path: Путь к исходному видео
         :param segments_data: Данные сегментов с tts_duration
         """
         self.job_id = job_id
-        self.input_video_path = input_video_path
+        self.input_audio_path = input_audio_path
         self.segments_data = segments_data
 
         # Создаем структуру папок
@@ -37,9 +36,14 @@ class AudioProcessor:
     def _get_audio_duration(self, audio_path):
         """Получить длительность аудио файла"""
         try:
-            cmd = ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
-                   '-of', 'csv=p=0', str(audio_path)]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            cmd = [
+                "ffprobe",
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(audio_path)
+            ]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             return float(result.stdout.strip())
         except:
             return 0.0
@@ -61,7 +65,7 @@ class AudioProcessor:
         """Извлекаем аудио сегменты по тем же временным меткам что и видео"""
         segments = self.segments_data.get('segments', [])
 
-        total_duration = self._get_audio_duration(self.input_video_path)
+        total_duration = self._get_audio_duration(self.input_audio_path)
         logger.info(f"Total audio duration: {total_duration:.4f} seconds")
 
         # Извлекаем начальный gap если есть
@@ -74,10 +78,9 @@ class AudioProcessor:
 
             cmd = [
                 'ffmpeg', '-y',
-                '-i', str(self.input_video_path),
+                '-i', str(self.input_audio_path),
                 '-ss', str(initial_gap_start),
                 '-to', str(initial_gap_end),
-                '-vn',  # без видео
                 '-acodec', 'mp3',
                 '-b:a', '192k',
                 str(initial_gap_path)
@@ -94,10 +97,9 @@ class AudioProcessor:
 
             cmd = [
                 'ffmpeg', '-y',
-                '-i', str(self.input_video_path),
+                '-i', str(self.input_audio_path),
                 '-ss', str(start),
                 '-to', str(end),
-                '-vn',  # без видео
                 '-acodec', 'mp3',
                 '-b:a', '192k',
                 str(output_path)
@@ -116,10 +118,9 @@ class AudioProcessor:
 
                     cmd = [
                         'ffmpeg', '-y',
-                        '-i', str(self.input_video_path),
+                        '-i', str(self.input_audio_path),
                         '-ss', str(gap_start),
                         '-to', str(gap_end),
-                        '-vn',
                         '-acodec', 'mp3',
                         '-b:a', '192k',
                         str(gap_path)
@@ -136,10 +137,9 @@ class AudioProcessor:
 
             cmd = [
                 'ffmpeg', '-y',
-                '-i', str(self.input_video_path),
+                '-i', str(self.input_audio_path),
                 '-ss', str(final_gap_start),
                 '-to', str(final_gap_end),
-                '-vn',
                 '-acodec', 'mp3',
                 '-b:a', '192k',
                 str(final_gap_path)
@@ -175,14 +175,30 @@ class AudioProcessor:
                 logger.info(
                     f"Audio segment {i}: stretching from {original_duration:.4f}s to {target_duration:.4f}s (factor: {speed_factor:.4f})")
 
+                if speed_factor < 0.5:
+                    filter_chain = f'atempo=0.5,atempo={speed_factor / 0.5}'
+                elif speed_factor > 2.0:
+                    filter_chain = f'atempo=2.0,atempo={speed_factor / 2.0}'
+                else:
+                    filter_chain = f'atempo={speed_factor}'
+
                 cmd = [
                     'ffmpeg', '-y',
                     '-i', str(input_path),
-                    '-filter:a', f'atempo={speed_factor}',
+                    '-filter:a', filter_chain,
                     '-acodec', 'mp3',
                     '-b:a', '192k',
                     str(output_path)
                 ]
+
+                # cmd = [
+                #     'ffmpeg', '-y',
+                #     '-i', str(input_path),
+                #     '-filter:a', f'atempo={speed_factor}',
+                #     '-acodec', 'mp3',
+                #     '-b:a', '192k',
+                #     str(output_path)
+                # ]
                 self._run_command(cmd)
 
                 actual_duration_after = self._get_audio_duration(str(output_path))
