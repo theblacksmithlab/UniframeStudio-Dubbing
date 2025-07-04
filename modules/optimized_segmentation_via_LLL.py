@@ -267,7 +267,7 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
             current_end = segment["end"]
         else:
             time_gap = segment["start"] - current_end
-            max_allowed_gap = 2.0
+            max_allowed_gap = 5.0
 
             if time_gap <= max_allowed_gap:
                 current_text += " " + text
