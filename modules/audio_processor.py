@@ -341,12 +341,35 @@ class AudioProcessor:
         if os.path.exists(background_audio_mp3):
             duration = self._get_audio_duration(background_audio_mp3)
 
-            # Вычисляем ожидаемую длительность для сравнения
-            expected_duration = sum(seg['tts_duration'] for seg in segments)
+            # Вычисляем ожидаемую длительность включая гэпы
+            tts_duration = sum(seg['tts_duration'] for seg in segments)
+
+            # Добавляем длительности гэпов из оригинального аудио
+            gaps_duration = 0.0
+
+            # Initial gap
+            if segments and segments[0]['start'] > 0.01:
+                gaps_duration += segments[0]['start']
+
+            # Gaps between segments
+            for i in range(len(segments) - 1):
+                current_end = segments[i]['end']
+                next_start = segments[i + 1]['start']
+                if next_start > current_end:
+                    gaps_duration += (next_start - current_end)
+
+            # Final gap (approximation based on total original duration)
+            total_original_duration = self._get_audio_duration(self.input_audio_path)
+            if segments and segments[-1]['end'] < total_original_duration - 0.01:
+                gaps_duration += (total_original_duration - segments[-1]['end'])
+
+            expected_duration = tts_duration + gaps_duration
             duration_diff = duration - expected_duration
 
             logger.info(f"Background audio created! Duration: {duration:.4f} sec")
-            logger.info(f"Expected TTS duration: {expected_duration:.4f} sec")
+            logger.info(f"TTS duration: {tts_duration:.4f} sec")
+            logger.info(f"Gaps duration: {gaps_duration:.4f} sec")
+            logger.info(f"Expected total: {expected_duration:.4f} sec")
             logger.info(f"Duration difference: {duration_diff:+.4f} sec ({duration_diff * 1000:+.1f} ms)")
 
             if abs(duration_diff) > 0.1:
