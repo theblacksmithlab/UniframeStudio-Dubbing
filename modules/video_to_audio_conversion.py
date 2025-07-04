@@ -43,16 +43,23 @@ def extract_audio_legacy(input_video_path, extracted_audio_path=None):
     return extracted_audio_path
 
 
-def extract_audio(input_video_path, extracted_audio_path=None):
+def extract_audio(
+        input_video_path,
+        extracted_audio_path=None,
+        original_hq_audio_path=None,
+        original_wav_audio_path=None
+):
     base_name = os.path.splitext(os.path.basename(input_video_path))[0]
     output_dir = os.path.dirname(input_video_path)
 
     if extracted_audio_path is None:
         extracted_audio_path = os.path.join(output_dir, f"{base_name}.mp3")
 
-    # Пути для дополнительных файлов
-    hq_audio_path = os.path.join(output_dir, f"{base_name}_44100.mp3")
-    wav_audio_path = os.path.join(output_dir, f"{base_name}_44100.wav")
+    if original_hq_audio_path is None:
+        original_hq_audio_path = os.path.join(output_dir, f"{base_name}_44100.mp3")
+
+    if original_wav_audio_path is None:
+        original_wav_audio_path = os.path.join(output_dir, f"{base_name}_44100.wav")
 
     # 1. Для транскрипции (экономный, 24kHz моно)
     command_transcription = [
@@ -74,7 +81,7 @@ def extract_audio(input_video_path, extracted_audio_path=None):
         "-acodec", "mp3",
         "-b:a", "320k",
         "-ar", "44100",
-        hq_audio_path
+        original_hq_audio_path
     ]
 
     # 3. Для точной обработки длительности (WAV без потерь, 44.1kHz)
@@ -84,7 +91,7 @@ def extract_audio(input_video_path, extracted_audio_path=None):
         "-vn",
         "-acodec", "pcm_s16le",
         "-ar", "44100",
-        wav_audio_path
+        original_wav_audio_path
     ]
 
     def run_extraction(command, output_path, description):
@@ -105,8 +112,8 @@ def extract_audio(input_video_path, extracted_audio_path=None):
 
     # Извлекаем все три формата
     transcription_size = run_extraction(command_transcription, extracted_audio_path, "Transcription audio")
-    hq_mp3_size = run_extraction(command_hq_mp3, hq_audio_path, "High-quality MP3 audio")
-    wav_size = run_extraction(command_wav, wav_audio_path, "WAV audio")
+    hq_mp3_size = run_extraction(command_hq_mp3, original_hq_audio_path, "High-quality MP3 audio")
+    wav_size = run_extraction(command_wav, original_wav_audio_path, "WAV audio")
 
     # Предупреждение о размере только для файла транскрипции
     if transcription_size > 25:
@@ -115,8 +122,8 @@ def extract_audio(input_video_path, extracted_audio_path=None):
 
     logger.info(f"Audio extraction completed:")
     logger.info(f"  - Transcription: {os.path.basename(extracted_audio_path)} ({transcription_size:.2f} MB)")
-    logger.info(f"  - High-quality MP3: {os.path.basename(hq_audio_path)} ({hq_mp3_size:.2f} MB)")
-    logger.info(f"  - WAV processing: {os.path.basename(wav_audio_path)} ({wav_size:.2f} MB)")
+    logger.info(f"  - High-quality MP3: {os.path.basename(original_hq_audio_path)} ({hq_mp3_size:.2f} MB)")
+    logger.info(f"  - WAV processing: {os.path.basename(original_wav_audio_path)} ({wav_size:.2f} MB)")
 
     # Сохраняем дополнительные файлы как атрибуты основного пути
     # Для обратной совместимости возвращаем только основной файл

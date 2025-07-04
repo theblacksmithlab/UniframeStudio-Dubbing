@@ -32,6 +32,12 @@ def main():
     extract_parser.add_argument(
         "--output", "-o", help="Extracted audio-file path (optional)"
     )
+    extract_parser.add_argument(
+        "--hq_output", "-hq", help="Extracted hq audio-file path (optional)"
+    )
+    extract_parser.add_argument(
+        "--wav_output", "-wav", help="Extracted wav audio-file path (optional)"
+    )
 
 
     # Transcription command sub-parser
@@ -233,7 +239,7 @@ def main():
             sys.exit(1)
 
         try:
-            result_file = extract_audio(args.input, args.output)
+            result_file = extract_audio(args.input, args.output, args.hq_output, args.wav_output)
             logger.info(f"Extracting audio from video file completed successfully.")
             logger.info(f"The result was saved in file: {result_file}")
         except Exception as e:

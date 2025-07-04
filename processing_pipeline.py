@@ -179,7 +179,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     logger.info(f"{'=' * 25}")
     logger.info(f"[Step 1] Extracting audio from video {video_path}...")
     audio_path = f"{audio_input_dir}/{base_name}.mp3"
-    extract_cmd = [sys.executable, "cli.py", "extract_audio", "--input", video_path, "--output", audio_path]
+    original_hq_audio_path = f"{audio_input_dir}/{base_name}_44100.mp3"
+    original_wav_audio_path = f"{audio_input_dir}/{base_name}_44100.wav"
+    extract_cmd = [sys.executable, "cli.py", "extract_audio", "--input", video_path, "--output", audio_path, "--hq_output", original_hq_audio_path, "--wav_output", original_wav_audio_path]
 
     if not run_command(extract_cmd):
         return {
@@ -388,6 +390,8 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
         # Определяем путь к оригинальному аудио с fallback
         original_audio_path = os.path.join(audio_input_dir, f"{base_name}.mp3")
+        original_hq_audio_path = os.path.join(audio_input_dir, f"{base_name}_44100.mp3")
+        original_wav_audio_path = os.path.join(audio_input_dir, f"{base_name}_44100.wav")
 
         # НОВОЕ: Проверяем существование аудио файла
         if not os.path.exists(original_audio_path):
@@ -396,7 +400,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
             try:
                 # Извлекаем аудио из видео как fallback
-                extracted_audio_path = extract_audio(video_path, original_audio_path)
+                extracted_audio_path = extract_audio(video_path, original_audio_path, original_hq_audio_path, original_wav_audio_path)
                 logger.info(f"Audio successfully extracted to: {extracted_audio_path}")
             except Exception as e:
                 logger.error(f"Failed to extract audio: {e}")
