@@ -180,7 +180,8 @@ class AudioProcessor:
 
                 cmd_sox = [
                     'sox', str(input_path), str(output_path),
-                    'speed', str(speed_factor)
+                    # 'speed', str(speed_factor)
+                    'tempo', str(speed_factor)
                 ]
 
                 try:
