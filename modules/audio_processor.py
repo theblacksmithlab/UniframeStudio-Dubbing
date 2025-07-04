@@ -185,6 +185,10 @@ class AudioProcessor:
                 ]
                 self._run_command(cmd)
 
+                actual_duration_after = self._get_audio_duration(str(output_path))
+                logger.info(
+                    f"Audio segment {i}: RESULT actual={actual_duration_after:.4f}s (diff from target: {actual_duration_after - target_duration:+.4f}s)")
+
     def combine_background_audio(self):
         """Склеиваем все обработанные аудио сегменты в одну фоновую подложку"""
         segments = self.segments_data.get('segments', [])
