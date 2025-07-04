@@ -93,7 +93,7 @@ def get_simple_voice_mapping(gender: str):
     if gender == "male":
         return "onyx"
     elif gender == "female":
-        return "shimmer"
+        return "nova"
     else:
         return "onyx"
 

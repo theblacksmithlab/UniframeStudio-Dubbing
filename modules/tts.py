@@ -426,10 +426,10 @@ def generate_openai_tts_with_retry(client, text, voice, temp_file, max_retries=1
             logger.info(f"Attempting OpenAI TTS generation (attempt {retries + 1}/{max_retries})")
 
             response = client.audio.speech.create(
-                model="tts-1-hd",
+                model="tts-1",
                 voice=voice,
                 input=text,
-                speed=1.5
+                speed=1.3
             )
 
             if hasattr(response, 'content') and response.content:
