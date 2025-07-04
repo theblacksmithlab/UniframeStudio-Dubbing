@@ -48,6 +48,21 @@ class AudioProcessor:
         except:
             return 0.0
 
+    def _get_precise_audio_duration(self, audio_path, precision=6):
+        """Получить максимально точную длительность аудио файла"""
+        try:
+            cmd = [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(audio_path)
+            ]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            duration = float(result.stdout.strip())
+            return round(duration, precision)
+        except:
+            return 0.0
+
     def _run_command(self, cmd):
         """Выполнить команду ffmpeg"""
         try:
@@ -147,6 +162,131 @@ class AudioProcessor:
             self._run_command(cmd)
 
     def process_audio_segments(self):
+        """Растягиваем/сжимаем аудио сегменты под tts_duration с точным контролем длительности"""
+        segments = self.segments_data.get('segments', [])
+
+        for i, segment in enumerate(segments):
+            input_path = self.audio_segments_dir / f"audio_segment_{i:04d}.mp3"
+            output_path = self.processed_audio_segments_dir / f"processed_audio_segment_{i:04d}.mp3"
+
+            if not os.path.exists(input_path):
+                logger.error(f"Audio segment file not found: {input_path}")
+                continue
+
+            original_duration = self._get_audio_duration(input_path)
+            target_duration = segment['tts_duration']
+
+            if original_duration <= 0 or target_duration <= 0:
+                logger.warning(f"Invalid durations for segment {i}: orig={original_duration}, target={target_duration}")
+                continue
+
+            if abs(original_duration - target_duration) < 0.01:  # меньше 10мс
+                logger.info(f"Audio segment {i}: minimal duration change, copying file")
+                shutil.copy(str(input_path), str(output_path))
+            else:
+                # ТОЧНОЕ растяжение через комбинацию методов
+                speed_factor = original_duration / target_duration
+
+                logger.info(
+                    f"Audio segment {i}: stretching from {original_duration:.4f}s to {target_duration:.4f}s (factor: {speed_factor:.4f})")
+
+                # Шаг 1: Растяжение через asetrate + aresample (более точно чем atempo)
+                temp_stretched = self.temp_dir / f"temp_stretched_{i}.wav"
+
+                # Определяем исходную частоту дискретизации
+                cmd_probe = [
+                    "ffprobe", "-v", "error",
+                    "-select_streams", "a:0",
+                    "-show_entries", "stream=sample_rate",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    str(input_path)
+                ]
+                result = subprocess.run(cmd_probe, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                original_rate = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 44100
+
+                # Вычисляем новую частоту для точного растяжения
+                new_rate = int(original_rate / speed_factor)
+
+                # Растяжение через изменение частоты дискретизации
+                cmd_stretch = [
+                    'ffmpeg', '-y',
+                    '-i', str(input_path),
+                    '-filter:a', f'asetrate={new_rate},aresample={original_rate}',
+                    '-acodec', 'pcm_s16le',  # WAV для точности
+                    str(temp_stretched)
+                ]
+                self._run_command(cmd_stretch)
+
+                # Шаг 2: ТОЧНАЯ обрезка/дополнение до целевой длительности
+                actual_duration_after_stretch = self._get_audio_duration(temp_stretched)
+
+                if abs(actual_duration_after_stretch - target_duration) > 0.005:  # если погрешность > 5мс
+                    logger.info(
+                        f"Audio segment {i}: fine-tuning duration from {actual_duration_after_stretch:.4f}s to {target_duration:.4f}s")
+
+                    temp_final = self.temp_dir / f"temp_final_{i}.wav"
+
+                    if actual_duration_after_stretch > target_duration:
+                        # Обрезаем до точной длительности
+                        cmd_trim = [
+                            'ffmpeg', '-y',
+                            '-i', str(temp_stretched),
+                            '-t', f"{target_duration:.6f}",  # Точная длительность с микросекундами
+                            '-acodec', 'pcm_s16le',
+                            str(temp_final)
+                        ]
+                    else:
+                        # Дополняем тишиной до точной длительности
+                        silence_duration = target_duration - actual_duration_after_stretch
+                        cmd_pad = [
+                            'ffmpeg', '-y',
+                            '-i', str(temp_stretched),
+                            '-filter:a', f'apad=pad_dur={silence_duration:.6f}',
+                            '-acodec', 'pcm_s16le',
+                            str(temp_final)
+                        ]
+
+                    self._run_command(cmd_trim if actual_duration_after_stretch > target_duration else cmd_pad)
+
+                    # Конвертируем в финальный MP3
+                    cmd_final = [
+                        'ffmpeg', '-y',
+                        '-i', str(temp_final),
+                        '-acodec', 'mp3',
+                        '-b:a', '320k',
+                        str(output_path)
+                    ]
+                    self._run_command(cmd_final)
+
+                    # Очистка временных файлов
+                    if temp_final.exists():
+                        temp_final.unlink()
+                else:
+                    # Конвертируем сразу в MP3
+                    cmd_final = [
+                        'ffmpeg', '-y',
+                        '-i', str(temp_stretched),
+                        '-acodec', 'mp3',
+                        '-b:a', '320k',
+                        str(output_path)
+                    ]
+                    self._run_command(cmd_final)
+
+                # Очистка временного файла
+                if temp_stretched.exists():
+                    temp_stretched.unlink()
+
+                # Проверяем финальную длительность
+                final_duration = self._get_audio_duration(str(output_path))
+                diff = final_duration - target_duration
+
+                logger.info(
+                    f"Audio segment {i}: FINAL actual={final_duration:.4f}s target={target_duration:.4f}s (diff: {diff:+.4f}s)")
+
+                if abs(diff) > 0.01:  # Если погрешность больше 10мс
+                    logger.warning(f"Audio segment {i}: Duration precision warning! Diff: {diff * 1000:.1f}ms")
+
+    def process_audio_segments_old(self):
         """Растягиваем/сжимаем аудио сегменты под tts_duration"""
         segments = self.segments_data.get('segments', [])
 
