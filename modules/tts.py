@@ -429,6 +429,7 @@ def generate_openai_tts_with_retry(client, text, voice, temp_file, max_retries=1
                 model="tts-1-hd",
                 voice=voice,
                 input=text,
+                speed=1.5
             )
 
             if hasattr(response, 'content') and response.content:

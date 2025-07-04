@@ -245,7 +245,7 @@ def optimize_transcription_segments(transcription_file, output_file=None,
 
     logger.info(f"After LLM sentence splitting: {len(raw_segments)} segments")
 
-    # STEP 2: Merge short segments to meet minimum length requirement
+    # STEP 2: Merge short segments based on word count OR duration and time gaps
     merged_segments = []
     current_text = ""
     current_start = None
@@ -260,8 +260,9 @@ def optimize_transcription_segments(transcription_file, output_file=None,
             current_end = segment["end"]
         else:
             current_word_count = len(current_text.split())
+            current_duration = current_end - current_start
 
-            if current_word_count >= 3:
+            if current_word_count >= 3 and current_duration >= 2.0:
                 merged_segments.append({
                     "start": current_start,
                     "end": current_end,
@@ -295,7 +296,6 @@ def optimize_transcription_segments(transcription_file, output_file=None,
             "end": current_end,
             "text": current_text
         })
-
     logger.info(f"After merging short segments: {len(merged_segments)} segments")
 
     # STEP 3: Assign IDs and fix any overlapping segments
