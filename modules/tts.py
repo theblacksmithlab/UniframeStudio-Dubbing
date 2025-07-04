@@ -161,8 +161,8 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
             data["segments"][i]["tts_duration"] = round(actual_duration_ms / 1000, 6)
 
             diff_ratio = abs(actual_duration_ms - original_duration_ms) / original_duration_ms
-            if diff_ratio > 0.2:
-                logger.warning(f"ATTENTION! TTS duration differs from target by more than 20% ({diff_ratio:.2%})")
+            if diff_ratio > 0.25:
+                logger.warning(f"ATTENTION! TTS duration differs from target by more than 25% ({diff_ratio:.2%})")
 
             data["segments"][i]["speed_ratio"] = round(diff_ratio, 2)
 
@@ -428,7 +428,8 @@ def generate_openai_tts_with_retry(client, text, voice, temp_file, max_retries=1
             response = client.audio.speech.create(
                 model="gpt-4o-mini-tts",
                 voice=voice,
-                input=text
+                input=text,
+                instructions="Speak at 1.5x normal speed while maintaining clarity",
             )
 
             if hasattr(response, 'content') and response.content:
