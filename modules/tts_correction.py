@@ -155,8 +155,8 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
         logger.info(f"Speed ratio for video adjustment: {speed_ratio:.4f}x")
 
         diff_ratio = abs(actual_duration_ms - original_duration_ms) / original_duration_ms
-        if diff_ratio > 0.2:
-            logger.warning(f"ATTENTION! TTS duration differs from original by more than 20% ({diff_ratio:.2%})")
+        if diff_ratio > 0.25:
+            logger.warning(f"ATTENTION! TTS duration differs from original by more than 25% ({diff_ratio:.2%})")
 
         segment_audio = AudioSegment.from_file(temp_file)
         segment_audio = match_target_amplitude(segment_audio, -16.0)

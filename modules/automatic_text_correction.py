@@ -65,7 +65,7 @@ def correct_text_through_api(
         raise ValueError(f"OpenAI API error: {str(e)}")
 
 
-def correct_segment_durations(translation_file, job_id, max_attempts=5, threshold=0.2, voice="onyx", dealer="openai",
+def correct_segment_durations(translation_file, job_id, max_attempts=5, threshold=0.25, voice="onyx", dealer="openai",
                               elevenlabs_api_key=None, openai_api_key=None):
     if not openai_api_key:
         raise ValueError("OpenAI API key is required for text correction but not provided")
