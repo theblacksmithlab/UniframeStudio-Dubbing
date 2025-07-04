@@ -547,9 +547,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     with open(translated_path, 'r') as f:
         segments_data = json.load(f)
 
-    original_audio_path = os.path.join(audio_input_dir, f"{base_name}.mp3")
+    original_hq_audio_path = os.path.join(audio_input_dir, f"{base_name}_44100.wav")
 
-    audio_processor = AudioProcessor(job_id, original_audio_path, segments_data)
+    audio_processor = AudioProcessor(job_id, original_hq_audio_path, segments_data)
     audio_processor.extract_audio_segments()
     audio_processor.process_audio_segments()
     background_audio_path = audio_processor.combine_background_audio()
