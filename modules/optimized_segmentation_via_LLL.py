@@ -170,7 +170,7 @@ def get_sentence_timestamps_with_llm(sentence, segment, words_list, openai_api_k
     return {"start": final_start, "end": final_end}
 
 
-def optimize_transcription_segments(transcription_file, output_file=None, min_segment_length=30,
+def optimize_transcription_segments(transcription_file, output_file=None,
                                     openai_api_key=None, model="gpt-4o-mini"):
     if not openai_api_key:
         raise ValueError("OpenAI API key is required for LLM-powered segmentation but not provided")
@@ -254,25 +254,14 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
     for segment in raw_segments:
         text = segment["text"]
 
-        if not current_text or len(current_text) >= min_segment_length:
-            if current_text:
-                merged_segments.append({
-                    "start": current_start,
-                    "end": current_end,
-                    "text": current_text
-                })
-
+        if not current_text:
             current_text = text
             current_start = segment["start"]
             current_end = segment["end"]
         else:
-            time_gap = segment["start"] - current_end
-            max_allowed_gap = 5.0
+            current_word_count = len(current_text.split())
 
-            if time_gap <= max_allowed_gap:
-                current_text += " " + text
-                current_end = segment["end"]
-            else:
+            if current_word_count >= 3:
                 merged_segments.append({
                     "start": current_start,
                     "end": current_end,
@@ -282,6 +271,23 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
                 current_text = text
                 current_start = segment["start"]
                 current_end = segment["end"]
+            else:
+                time_gap = segment["start"] - current_end
+                max_allowed_gap = 0.5
+
+                if time_gap <= max_allowed_gap:
+                    current_text += " " + text
+                    current_end = segment["end"]
+                else:
+                    merged_segments.append({
+                        "start": current_start,
+                        "end": current_end,
+                        "text": current_text
+                    })
+
+                    current_text = text
+                    current_start = segment["start"]
+                    current_end = segment["end"]
 
     if current_text:
         merged_segments.append({
