@@ -161,14 +161,14 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
             data["segments"][i]["tts_duration"] = round(actual_duration_ms / 1000, 6)
 
             diff_ratio = abs(actual_duration_ms - original_duration_ms) / original_duration_ms
-            if diff_ratio > 0.25:
-                logger.warning(f"ATTENTION! TTS duration differs from target by more than 25% ({diff_ratio:.2%})")
+            if diff_ratio > 0.20:
+                logger.warning(f"ATTENTION! TTS duration differs from target by more than 20% ({diff_ratio:.2%})")
 
             data["segments"][i]["speed_ratio"] = round(diff_ratio, 2)
 
             segment_audio = match_target_amplitude(segment_audio, -16.0)
 
-            segment_audio.export(segment_file, format="mp3", bitrate="192k")
+            segment_audio.export(segment_file, format="mp3", bitrate="320k")
             logger.info(f"Saved segment to {segment_file}")
 
             generated_segments.append({

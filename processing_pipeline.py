@@ -104,7 +104,7 @@ def combine_video_and_audio(video_path, audio_path, output_path):
         return False
 
 
-def mix_audio_tracks(tts_audio_path, background_audio_path, output_path, tts_volume=1.0, bg_volume=0.3):
+def mix_audio_tracks(tts_audio_path, background_audio_path, output_path, tts_volume=1.0, bg_volume=0.25):
     try:
         logger.info(f"Mixing TTS (vol: {tts_volume}) + Background (vol: {bg_volume})")
 
@@ -178,10 +178,11 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     update_job_status(job_id=job_id, step=current_step)
     logger.info(f"{'=' * 25}")
     logger.info(f"[Step 1] Extracting audio from video {video_path}...")
-    audio_path = f"{audio_input_dir}/{base_name}.mp3"
+    original_audio_path = f"{audio_input_dir}/{base_name}.mp3"
     original_hq_audio_path = f"{audio_input_dir}/{base_name}_44100.mp3"
     original_wav_audio_path = f"{audio_input_dir}/{base_name}_44100.wav"
-    extract_cmd = [sys.executable, "cli.py", "extract_audio", "--input", video_path, "--output", audio_path, "--hq_output", original_hq_audio_path, "--wav_output", original_wav_audio_path]
+    extract_cmd = [sys.executable, "cli.py", "extract_audio", "--input", video_path, "--output", original_audio_path,
+                   "--hq_output", original_hq_audio_path, "--wav_output", original_wav_audio_path]
 
     if not run_command(extract_cmd):
         return {
@@ -191,7 +192,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "step": current_step
         }
 
-    if not os.path.exists(audio_path):
+    if not os.path.exists(original_audio_path):
         return {
             "status": "error",
             "message": f"Failed to extract audio from video-file",
@@ -205,10 +206,10 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     current_step = 4
     update_job_status(job_id=job_id, step=current_step)
     logger.info(f"{'=' * 25}")
-    logger.info(f"[Step 2] Transcribing audio {os.path.basename(audio_path)}...")
+    logger.info(f"[Step 2] Transcribing audio {os.path.basename(original_audio_path)}...")
     transcription_path = os.path.join(processing_jsons_dir, f"{base_name}_transcribed.json")
     transcribe_cmd = [sys.executable, "cli.py", "transcribe",
-                      "--input", audio_path,
+                      "--input", original_audio_path,
                       "--output", transcription_path,
                       "--job_id", job_id,
                       "--openai_api_key", openai_api_key]
@@ -388,12 +389,6 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         logger.info(f"{'=' * 25}")
         logger.info(f"[Step 7.5] Adding gender analysis and OpenAI voice mapping...")
 
-        # Определяем путь к оригинальному аудио с fallback
-        original_audio_path = os.path.join(audio_input_dir, f"{base_name}.mp3")
-        original_hq_audio_path = os.path.join(audio_input_dir, f"{base_name}_44100.mp3")
-        original_wav_audio_path = os.path.join(audio_input_dir, f"{base_name}_44100.wav")
-
-        # НОВОЕ: Проверяем существование аудио файла
         if not os.path.exists(original_audio_path):
             logger.warning(f"Audio file not found at {original_audio_path}")
             logger.info(f"Extracting audio from video: {video_path}")
@@ -513,7 +508,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
                         "--dealer", tts_provider,
                         "--voice", tts_voice,
                         "--attempts", "5",
-                        "--threshold", "0.25"]
+                        "--threshold", "0.2"]
 
     if tts_provider == "elevenlabs" and elevenlabs_api_key:
         auto_correct_cmd.extend(["--elevenlabs_api_key", elevenlabs_api_key])
@@ -560,7 +555,6 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     mixed_audio_path = None
     mixed_stereo_path = None
-    final_video_with_bg_path = None
 
     if background_audio_path and os.path.exists(background_audio_path):
         # Step [11]
@@ -581,6 +575,8 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             logger.error("Failed to mix audio tracks, skipping background audio versions")
             mixed_audio_path = None
             mixed_stereo_path = None
+
+        audio_processor.cleanup()
     else:
         logger.warning("Background audio creation failed, skipping mixed audio versions")
 
@@ -626,7 +622,6 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     logger.info(f"[Step 11] Combining mute videos with stereo audio...")
 
     final_video_path = os.path.join(video_result_dir, f"{base_name}_processed.mp4")
-    # final_video_with_bg_path = os.path.join(video_result_dir, f"{base_name}_processed_with_bg.mp4")
 
     if os.path.exists(final_stereo_path):
         new_audio_track = final_stereo_path
@@ -676,7 +671,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             "tts_voice": tts_voice
         },
         "output_files": {
-        "audio": audio_path,
+        "audio": original_audio_path,
         "transcription": transcription_path,
         "corrected": corrected_path,
         "cleaned": cleaned_path,
@@ -762,7 +757,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     logger.info(f"{'=' * 50}")
     logger.info("=================================================================")
-    logger.info(f"JOB PROCESSING FINISHED SUCCESSFULLY!")
+    logger.info(f"DUBBING JOB MAIN PIPELINE FINISHED SUCCESSFULLY!")
     logger.info(f"Job ID: {job_id}")
     logger.info(f"Original video: {video_path}")
     logger.info(f"Final video: {final_video_path}")

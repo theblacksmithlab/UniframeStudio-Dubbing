@@ -65,7 +65,7 @@ def correct_text_through_api(
         raise ValueError(f"OpenAI API error: {str(e)}")
 
 
-def correct_segment_durations(translation_file, job_id, max_attempts=5, threshold=0.25, voice="onyx", dealer="openai",
+def correct_segment_durations(translation_file, job_id, max_attempts=5, threshold=0.2, voice="onyx", dealer="openai",
                               elevenlabs_api_key=None, openai_api_key=None):
     if not openai_api_key:
         raise ValueError("OpenAI API key is required for text correction but not provided")
@@ -124,13 +124,24 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
                 logger.warning(f"Warning: Could not find segment {segment_id} in segments list")
                 continue
 
-            previous_text = ""
-            next_text = ""
+            # test
+            previous_texts = []
+            next_texts = []
 
-            if segment_index > 0:
-                previous_text = segments[segment_index - 1].get("translated_text", "").strip()
-            if segment_index < len(segments) - 1:
-                next_text = segments[segment_index + 1].get("translated_text", "").strip()
+            for i in range(max(0, segment_index - 2), segment_index):
+                if i >= 0:
+                    prev_text = segments[i].get("translated_text", "").strip()
+                    if prev_text:
+                        previous_texts.append(prev_text)
+
+            for i in range(segment_index + 1, min(len(segments), segment_index + 3)):
+                if i < len(segments):
+                    next_text = segments[i].get("translated_text", "").strip()
+                    if next_text:
+                        next_texts.append(next_text)
+
+            previous_text = " ".join(previous_texts)
+            next_text = " ".join(next_texts)
 
             try:
                 corrected_text = correct_text_through_api(
@@ -144,6 +155,28 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
                 )
 
                 data["segments"][segment_index]["translated_text"] = corrected_text
+                # end of the test
+
+            # previous_text = ""
+            # next_text = ""
+
+            # if segment_index > 0:
+            #     previous_text = segments[segment_index - 1].get("translated_text", "").strip()
+            # if segment_index < len(segments) - 1:
+            #     next_text = segments[segment_index + 1].get("translated_text", "").strip()
+
+            # try:
+            #     corrected_text = correct_text_through_api(
+            #         segment["translated_text"],
+            #         segment["original_duration"],
+            #         segment["tts_duration"],
+            #         mode,
+            #         previous_text,
+            #         next_text,
+            #         openai_api_key=openai_api_key
+            #     )
+            #
+            #     data["segments"][segment_index]["translated_text"] = corrected_text
 
                 try:
                     with open(translation_file, "w", encoding="utf-8") as f:

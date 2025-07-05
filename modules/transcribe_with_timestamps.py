@@ -139,7 +139,12 @@ def transcribe_audio_with_timestamps(
         audio_chunk = AudioSegment.from_file(chunk_path)
         chunk_duration = len(audio_chunk) / 1000
 
-        transcription = transcribe(chunk_path, source_language=source_language, openai_api_key=openai_api_key)
+        transcription = transcribe(
+            chunk_path,
+            source_language=source_language,
+            openai_api_key=openai_api_key,
+            transcription_keywords=transcription_keywords
+        )
 
         # transcription = transcribe_local(
         #     file_path=chunk_path,
@@ -194,11 +199,11 @@ def transcribe_audio_with_timestamps(
     if os.path.exists(temp_audio_chunks_dir) and len(chunk_paths) > 1:
         shutil.rmtree(temp_audio_chunks_dir)
 
-    logger.info(f"Timestamped transcription successfully finished! Result: {output_file}")
+    logger.info(f"Timestamped transcription completed!")
     return output_file
 
 
-def transcribe(file_path, source_language=None, openai_api_key=None):
+def transcribe(file_path, source_language=None, openai_api_key=None, transcription_keywords: Optional[str] = None):
     if not openai_api_key:
         raise ValueError("OpenAI API key is required for transcription step but not provided")
 
@@ -206,6 +211,13 @@ def transcribe(file_path, source_language=None, openai_api_key=None):
         language = source_language
     else:
         language = None
+
+    base_prompt = "Add proper punctuation."
+    if transcription_keywords:
+        prompt = f"Keywords for transcription: {transcription_keywords}. {base_prompt}"
+        logger.info(f"Using keywords: {transcription_keywords}")
+    else:
+        prompt = base_prompt
 
     try:
         client = openai.OpenAI(api_key=openai_api_key)
@@ -216,7 +228,8 @@ def transcribe(file_path, source_language=None, openai_api_key=None):
                 "file": audio_file,
                 "response_format": "verbose_json",
                 "timestamp_granularities": ["segment", "word"],
-                "temperature": 0.1
+                "temperature": 0.1,
+                "prompt": prompt
             }
 
             if language:

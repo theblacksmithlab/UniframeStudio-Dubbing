@@ -382,7 +382,6 @@ class AudioProcessor:
             return None
 
     def cleanup(self):
-        """Очистка временных файлов"""
         try:
             shutil.rmtree(self.temp_dir)
             logger.info("AudioProcessor temporary files cleaned up")
