@@ -556,7 +556,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         mixed_audio_path = os.path.join(audio_result_dir, "mixed_audio_with_bg.mp3")
         mixed_stereo_path = os.path.join(audio_result_dir, "mixed_stereo_with_bg.mp3")
 
-        if mix_audio_tracks(final_audio_path, background_audio_path, mixed_audio_path, job_id):
+        if mix_audio_tracks(final_audio_path, background_audio_path, mixed_audio_path, job_id=job_id):
             job_logger.info("Successfully created mixed audio with background")
             if not create_stereo_version(mixed_audio_path, mixed_stereo_path):
                 job_logger.warning("Failed to create stereo version of mixed audio, will use mono")
