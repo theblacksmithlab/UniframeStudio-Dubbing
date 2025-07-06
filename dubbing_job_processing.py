@@ -15,12 +15,8 @@ from modules.job_status import STEP_DESCRIPTIONS
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
-def run_command(command, job_id=None, description=None, **kwargs):
-    if job_id:
-        from utils.logger_config import get_job_logger
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def run_command(command, job_id, description=None, **kwargs):
+    log = get_job_logger(logger, job_id)
 
     try:
         kwargs.setdefault('capture_output', True)
@@ -59,11 +55,7 @@ def create_stereo_version(input_file, output_file):
 
 
 def combine_video_and_audio(video_path, audio_path, output_path, job_id, step_description):
-    if job_id:
-        from utils.logger_config import get_job_logger
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+    log = get_job_logger(logger, job_id)
 
     try:
         cmd = [
@@ -81,7 +73,7 @@ def combine_video_and_audio(video_path, audio_path, output_path, job_id, step_de
 
         log.info(f"Combining: {os.path.basename(video_path)} + {os.path.basename(audio_path)}")
 
-        if run_command(cmd, job_id=job_id, description=step_description):
+        if run_command(cmd, job_id, description=step_description):
             log.info(f"Successfully combined: {os.path.basename(output_path)}")
             return True
         else:
@@ -92,12 +84,8 @@ def combine_video_and_audio(video_path, audio_path, output_path, job_id, step_de
         return False
 
 
-def mix_audio_tracks(tts_audio_path, background_audio_path, output_path, tts_volume=1.0, bg_volume=0.25, job_id=None):
-    if job_id:
-        from utils.logger_config import get_job_logger
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def mix_audio_tracks(job_id, tts_audio_path, background_audio_path, output_path, tts_volume=1.0, bg_volume=0.25):
+    log = get_job_logger(logger, job_id)
 
     try:
         log.info(f"Mixing TTS (vol: {tts_volume}) + Background (vol: {bg_volume})")
@@ -181,7 +169,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     extract_cmd = [sys.executable, "cli.py", "extract_audio", "--job_id", job_id, "--input", video_path, "--output",
                    original_audio_path, "--hq_output", original_hq_audio_path, "--wav_output", original_wav_audio_path]
 
-    if not run_command(extract_cmd, job_id=job_id, description=step_description):
+    if not run_command(extract_cmd, job_id, description=step_description):
         return {
             "status": "error",
             "message": f"Failed to extract audio from video-file",
@@ -217,7 +205,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     if transcription_keywords:
         transcribe_cmd.extend(["--transcription_keywords", transcription_keywords])
 
-    if not run_command(transcribe_cmd, job_id=job_id, description=step_description):
+    if not run_command(transcribe_cmd, job_id, description=step_description):
         return {
             "status": "error",
             "message": f"Failed to transcribe audio",
@@ -244,7 +232,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     correct_cmd = [sys.executable, "cli.py", "correct", "--job_id", job_id, "--input", transcription_path, "--output",
                    corrected_path]
 
-    if not run_command(correct_cmd, job_id=job_id, description=step_description):
+    if not run_command(correct_cmd, job_id, description=step_description):
         return {
             "status": "error",
             "message": f"Failed to structure transcription",
@@ -271,7 +259,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     cleanup_cmd = [sys.executable, "cli.py", "cleanup", "--job_id", job_id, "--input", corrected_path, "--output",
                    cleaned_path]
 
-    if not run_command(cleanup_cmd, job_id=job_id, description=step_description):
+    if not run_command(cleanup_cmd, job_id, description=step_description):
         return {
             "status": "error",
             "message": f"Failed to clean transcription",
@@ -301,7 +289,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     if openai_api_key:
         optimize_cmd.extend(["--openai_api_key", openai_api_key])
 
-    if not run_command(optimize_cmd, job_id=job_id, description=step_description):
+    if not run_command(optimize_cmd, job_id, description=step_description):
         return {
             "status": "error",
             "message": f"Failed to optimize transcription segments",
@@ -331,7 +319,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     adjust_cmd = [sys.executable, "cli.py", "adjust_timing", "--job_id", job_id, "--input", optimized_path, "--output",
                   adjusted_path]
 
-    if not run_command(adjust_cmd, job_id=job_id, description=step_description):
+    if not run_command(adjust_cmd, job_id, description=step_description):
         return {
             "status": "error",
             "message": f"Failed to adjust timing for transcription segments",
@@ -366,7 +354,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     if openai_api_key:
         translate_cmd.extend(["--openai_api_key", openai_api_key])
 
-    if not run_command(translate_cmd, job_id=job_id, description=step_description):
+    if not run_command(translate_cmd, job_id, description=step_description):
         return {
             "status": "error",
             "message": f"Failed to translate transcription segments",
@@ -395,8 +383,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
             job_logger.info(f"Extracting audio from video: {video_path}")
 
             try:
-                extracted_audio_path = extract_audio(video_path, original_audio_path, original_hq_audio_path,
-                                                     original_wav_audio_path, job_id=job_id)
+                extracted_audio_path = extract_audio(video_path, job_id, extracted_audio_path=original_audio_path,
+                                                     original_hq_audio_path=original_hq_audio_path,
+                                                     original_wav_audio_path=original_wav_audio_path)
                 job_logger.info(f"Audio successfully extracted to: {extracted_audio_path}")
             except Exception as e:
                 job_logger.error(f"Failed to extract audio: {e}")
@@ -462,7 +451,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
                 "step": current_step
             }
 
-    if not run_command(tts_cmd, job_id=job_id, description=step_description):
+    if not run_command(tts_cmd, job_id, description=step_description):
         return {
             "status": "error",
             "message": f"Failed to generate TTS audio",
@@ -511,7 +500,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     if tts_provider == "openai" and openai_api_key:
         auto_correct_cmd.extend(["--openai_api_key", openai_api_key])
 
-    if not run_command(auto_correct_cmd, job_id=job_id, description=step_description):
+    if not run_command(auto_correct_cmd, job_id, description=step_description):
         return {
             "status": "error",
             "message": f"Failed to auto-correct transcription segments",
@@ -556,7 +545,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         mixed_audio_path = os.path.join(audio_result_dir, "mixed_audio_with_bg.mp3")
         mixed_stereo_path = os.path.join(audio_result_dir, "mixed_stereo_with_bg.mp3")
 
-        if mix_audio_tracks(final_audio_path, background_audio_path, mixed_audio_path, job_id=job_id):
+        if mix_audio_tracks(job_id, final_audio_path, background_audio_path, mixed_audio_path):
             job_logger.info("Successfully created mixed audio with background")
             if not create_stereo_version(mixed_audio_path, mixed_stereo_path):
                 job_logger.warning("Failed to create stereo version of mixed audio, will use mono")
@@ -587,7 +576,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
                          "--json_file", translated_path,
                          "--output_video", tts_based_video_path]
 
-    if not run_command(process_video_cmd, job_id=job_id, description=step_description):
+    if not run_command(process_video_cmd, job_id, description=step_description):
         return {
             "status": "error",
             "message": f"Failed to process video",
@@ -676,10 +665,10 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         "final_video": final_video_path,
         "final_video_tts_based": tts_based_video_path
 
-        },
-        "steps_completed": ["extract", "transcribe", "correct", "cleanup", "optimize", "adjust", "translate",
-                            "tts", "auto-correct", "final_audio_files_creation", "process_video",
-                            "combine_video_audio"]
+        }
+        # "steps_completed": ["extract", "transcribe", "correct", "cleanup", "optimize", "adjust", "translate",
+        #                     "tts", "auto-correct", "final_audio_files_creation", "process_video",
+        #                     "combine_video_audio"]
     }
 
     # [Cleanup]
@@ -749,11 +738,11 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     job_logger.info(f"Result files: {moved_files}")
 
     job_logger.info(f"{'=' * 50}")
-    job_logger.info(f"DUBBING JOB MAIN PIPELINE FINISHED SUCCESSFULLY!")
+    job_logger.info(f"DUBBING JOB PIPELINE FINISHED SUCCESSFULLY!")
     job_logger.info(f"Job ID: {job_id}")
     job_logger.info(f"Original video: {video_path}")
     job_logger.info(f"Final video: {final_video_path}")
-    job_logger.info(f"Total steps completed: {len(result['steps_completed'])}")
+    # job_logger.info(f"Total steps completed: {len(result['steps_completed'])}")
     job_logger.info(f"{'=' * 50}")
 
     return result

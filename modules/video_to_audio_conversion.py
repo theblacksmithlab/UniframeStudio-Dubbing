@@ -1,22 +1,18 @@
 import os
 import subprocess
-from utils.logger_config import setup_logger
+from utils.logger_config import setup_logger, get_job_logger
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def extract_audio(
         input_video_path,
+        job_id,
         extracted_audio_path=None,
         original_hq_audio_path=None,
         original_wav_audio_path=None,
-        job_id=None
 ):
-    if job_id:
-        from utils.logger_config import get_job_logger
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+    log = get_job_logger(logger, job_id)
 
     def check_cuda_available():
         try:

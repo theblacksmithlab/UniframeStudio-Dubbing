@@ -38,11 +38,8 @@ def is_sentence_complete(text):
     return text[-1] in ['.', '!', '?']
 
 
-def correct_transcript_segments(input_file, output_file=None, job_id=None):
-    if job_id:
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def correct_transcript_segments(input_file, job_id, output_file=None):
+    log = get_job_logger(logger, job_id)
 
     if output_file is None:
         base_dir = os.path.dirname(input_file)

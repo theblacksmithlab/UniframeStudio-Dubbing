@@ -35,7 +35,7 @@ def download_video_from_s3(video_url: str, job_id: str) -> str:
     s3_client = boto3.client("s3")
     try:
         s3_client.download_file(bucket, key, local_path)
-
+        job_logger.info("Successfully downloaded video from cloud storage")
         return local_path
     except ClientError as e:
         job_logger.error(f"Error downloading video-file from cloud storage: {e}")
@@ -167,8 +167,8 @@ def main():
         update_job_status(job_id=job_id, step=2)
 
         try:
+            job_logger.info("Downloading original video-file from cloud storage...")
             download_video_from_s3(params["video_url"], job_id)
-            job_logger.info("Successfully downloaded video from cloud storage")
         except Exception as e:
             job_logger.error(f"Error downloading video: {e}")
             update_job_status(
@@ -216,7 +216,7 @@ def main():
             update_job_status(job_id=job_id, step=18)
 
             try:
-                job_logger.info("Uploading results to cloud storage...")
+                job_logger.info("Uploading dubbing job results to cloud storage...")
 
                 result_urls = upload_results_to_s3(job_id)
 

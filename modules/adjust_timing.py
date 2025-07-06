@@ -2,15 +2,11 @@ import json
 from utils.logger_config import setup_logger
 from utils.logger_config import get_job_logger
 
-
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
-def adjust_segments_timing(file_path, output_file=None, job_id=None):
-    if job_id:
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def adjust_segments_timing(file_path, job_id, output_file=None):
+    log = get_job_logger(logger, job_id)
 
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)

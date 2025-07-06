@@ -2,17 +2,10 @@ import os
 import json
 from utils.logger_config import setup_logger
 
-
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
-def cleanup_transcript_segments(input_file, output_file=None, job_id=None):
-    # if job_id:
-    #     from utils.logger_config import get_job_logger
-    #     log = get_job_logger(logger, job_id)
-    # else:
-    #     log = logger
-
+def cleanup_transcript_segments(input_file, output_file=None):
     if output_file is None:
         base_dir = os.path.dirname(input_file)
         base_name = os.path.splitext(os.path.basename(input_file))[0]

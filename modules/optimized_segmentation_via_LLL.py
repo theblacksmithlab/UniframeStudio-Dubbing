@@ -52,11 +52,8 @@ def filter_words_by_timeframe(words_array, segment_start, segment_end):
     return filtered_words
 
 
-def call_llm_for_sentence_boundaries(sentence, words_array, openai_api_key, model="gpt-4o", job_id=None):
-    if job_id:
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def call_llm_for_sentence_boundaries(job_id, sentence, words_array, openai_api_key, model="gpt-4o"):
+    log = get_job_logger(logger, job_id)
 
     try:
         words_for_llm = []
@@ -119,11 +116,8 @@ def call_llm_for_sentence_boundaries(sentence, words_array, openai_api_key, mode
         return None
 
 
-def get_sentence_timestamps_with_llm(sentence, segment, words_list, openai_api_key, model="gpt-4o", job_id=None):
-    if job_id:
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def get_sentence_timestamps_with_llm(job_id, sentence, segment, words_list, openai_api_key, model="gpt-4o"):
+    log = get_job_logger(logger, job_id)
 
     sentence = sentence.strip()
     if not sentence:
@@ -142,7 +136,7 @@ def get_sentence_timestamps_with_llm(sentence, segment, words_list, openai_api_k
 
     log.info(f"Found {len(segment_words)} words in segment timeframe")
 
-    llm_result = call_llm_for_sentence_boundaries(sentence, segment_words, openai_api_key, model, job_id=job_id)
+    llm_result = call_llm_for_sentence_boundaries(job_id, sentence, segment_words, openai_api_key, model)
 
     if not llm_result:
         log.warning(f"LLM failed to find boundaries for sentence: {sentence[:30]}...")
@@ -180,12 +174,9 @@ def get_sentence_timestamps_with_llm(sentence, segment, words_list, openai_api_k
     return {"start": final_start, "end": final_end}
 
 
-def optimize_transcription_segments(transcription_file, output_file=None,
-                                    openai_api_key=None, model="gpt-4o", job_id=None):
-    if job_id:
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def optimize_transcription_segments(transcription_file, job_id, output_file=None,
+                                    openai_api_key=None, model="gpt-4o"):
+    log = get_job_logger(logger, job_id)
 
     if not openai_api_key:
         raise ValueError("OpenAI API key is required for LLM-powered segmentation but not provided")
@@ -230,8 +221,8 @@ def optimize_transcription_segments(transcription_file, output_file=None,
             sentence_segments = []
 
             for sentence in sentences:
-                timestamps = get_sentence_timestamps_with_llm(sentence, segment, words_list,
-                                                              openai_api_key, model, job_id=job_id)
+                timestamps = get_sentence_timestamps_with_llm(job_id, sentence, segment, words_list,
+                                                              openai_api_key, model)
 
                 if timestamps:
                     sentence_segments.append({

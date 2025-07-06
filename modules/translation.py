@@ -7,12 +7,9 @@ from utils.logger_config import setup_logger, get_job_logger
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
-def translate_transcribed_segments(input_file, output_file=None, target_language=None,
-                                   model="gpt-4o", openai_api_key=None, job_id=None):
-    if job_id:
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def translate_transcribed_segments(input_file, job_id, output_file=None, target_language=None,
+                                   model="gpt-4o", openai_api_key=None):
+    log = get_job_logger(logger, job_id)
 
     if not openai_api_key:
         raise ValueError("OpenAI API key is required but not provided by user")

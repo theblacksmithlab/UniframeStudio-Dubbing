@@ -37,10 +37,13 @@ class AudioProcessor:
                 "-of", "default=noprint_wrappers=1:nokey=1",
                 str(audio_path)
             ]
-            # result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            result = self._run_command(cmd, description="Getting video duration (JSON)")
+
+            result = self._run_command(cmd, description="Getting audio duration")
+
             return float(result.stdout.strip())
-        except:
+
+        except Exception as e:
+            self.log.error(f"Failed to get audio duration for {audio_path}: {e}")
             return 0.0
 
     def _run_command(self, cmd, description=None, **kwargs):
@@ -220,7 +223,7 @@ class AudioProcessor:
 
                 except FileNotFoundError:
                     self.log.warning(f"SOX not found, using ffmpeg for segment {i}")
-                    self._precise_ffmpeg_stretch_wav(input_path, output_path, target_duration, speed_factor)
+                    self._precise_ffmpeg_stretch_wav(input_path, output_path, speed_factor)
 
                 final_duration = self._get_audio_duration(output_path)
                 final_diff = final_duration - target_duration
@@ -230,7 +233,7 @@ class AudioProcessor:
                 self.log.error(f"Error processing segment {i}: {e}")
                 shutil.copy(str(input_path), str(output_path))
 
-    def _precise_ffmpeg_stretch_wav(self, input_wav, output_wav, target_duration, speed_factor):
+    def _precise_ffmpeg_stretch_wav(self, input_wav, output_wav, speed_factor):
         if speed_factor < 0.5:
             filter_chain = f'atempo=0.5,atempo={speed_factor / 0.5}'
         elif speed_factor > 2.0:

@@ -256,7 +256,8 @@ def main():
             sys.exit(1)
 
         try:
-            extract_audio(args.input, args.output, args.hq_output, args.wav_output, job_id=args.job_id)
+            extract_audio(args.input, args.job_id, extracted_audio_path=args.output,
+                          original_hq_audio_path=args.hq_output, original_wav_audio_path=args.wav_output)
             job_logger.info("Extracting audio track from video file completed successfully")
         except Exception as e:
             job_logger.error(f"Error during video to audio conversion: {e}")
@@ -296,7 +297,7 @@ def main():
             sys.exit(1)
 
         try:
-            correct_transcript_segments(args.input, args.output, job_id=args.job_id)
+            correct_transcript_segments(args.input, args.job_id, args.output)
             job_logger.info("Structuring completed successfully")
         except Exception as e:
             job_logger.error(f"Error during restructuring: {e}")
@@ -326,9 +327,9 @@ def main():
         try:
             optimize_transcription_segments(
                 args.input,
+                args.job_id,
                 args.output,
                 openai_api_key=args.openai_api_key,
-                job_id=args.job_id
             )
             job_logger.info("Transcription optimized successfully")
         except Exception as e:
@@ -343,7 +344,7 @@ def main():
             sys.exit(1)
 
         try:
-            adjust_segments_timing(args.input, args.output, job_id=args.job_id)
+            adjust_segments_timing(args.input, args.job_id, args.output)
             job_logger.info("Adjusting segments timing in transcription completed successfully")
         except Exception as e:
             job_logger.error(f"Error during timing adjustment: {e}")
@@ -363,11 +364,11 @@ def main():
         try:
             translate_transcribed_segments(
                 args.input,
+                args.job_id,
                 args.output,
                 target_language=args.target_language,
                 model=args.model,
                 openai_api_key=args.openai_api_key,
-                job_id=args.job_id,
             )
 
             job_logger.info("Translation completed successfully")

@@ -80,7 +80,7 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
     segments_dir = os.path.join(base_dir, "audio_segments")
 
     for attempt in range(1, max_attempts + 1):
-        log.info(f"\n=== Attempt {attempt}/{max_attempts} for correcting segment durations ===")
+        log.info(f"=== Attempt {attempt}/{max_attempts} for correcting segment durations ===")
 
         with open(translation_file, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -269,7 +269,7 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
 
     if remaining_issues:
         log.info(
-            f"\nWARNING: After {max_attempts} attempts, {len(remaining_issues)} segments still need manual correction:")
+            f"WARNING: After {max_attempts} attempts, {len(remaining_issues)} segments still need manual correction:")
         for issue in remaining_issues:
             log.info(f"  - Segment {issue['id']}: {issue['start']:.2f}s - {issue['end']:.2f}s")
             log.info(f"    Original: {issue['original_duration']:.3f}s, TTS: {issue['tts_duration']:.3f}s")

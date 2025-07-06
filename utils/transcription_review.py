@@ -37,11 +37,8 @@ def upload_transcription_for_review(job_id: str, transcription_file_path: str) -
         raise
 
 
-def check_s3_file_exists(s3_bucket: str, s3_key: str, job_id=None) -> bool:
-    if job_id:
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def check_s3_file_exists(job_id, s3_bucket: str, s3_key: str) -> bool:
+    log = get_job_logger(logger, job_id)
 
     s3_client = boto3.client("s3")
     try:
@@ -108,7 +105,7 @@ def get_review_result(job_id: str, original_translated_transcription: str) -> st
         for check_num in range(1, max_checks + 1):
             time.sleep(check_interval)
 
-            if check_s3_file_exists(s3_bucket, corrected_s3_key, job_id=job_id):
+            if check_s3_file_exists(job_id, s3_bucket, corrected_s3_key):
                 log.info(f"Found corrected transcription after {check_num * check_interval} seconds!")
 
                 corrected_transcription_path = download_corrected_transcription(job_id)
