@@ -20,9 +20,6 @@ def main():
     parser = argparse.ArgumentParser(description="Smart dubbing system")
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
-    args = parser.parse_args()
-    job_logger = get_job_logger(logger, args.job_id)
-
     # Audio extraction sub-parser
     extract_parser = subparsers.add_parser(
         "extract_audio", help="Extract audio from video file"
@@ -247,6 +244,7 @@ def main():
     )
 
     args = parser.parse_args()
+    job_logger = get_job_logger(logger, args.job_id)
 
     if not args.command:
         parser.print_help()
