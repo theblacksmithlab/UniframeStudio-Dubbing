@@ -199,7 +199,6 @@ def transcribe_audio_with_timestamps(
     if os.path.exists(temp_audio_chunks_dir) and len(chunk_paths) > 1:
         shutil.rmtree(temp_audio_chunks_dir)
 
-    logger.info(f"Timestamped transcription completed!")
     return output_file
 
 

@@ -6,7 +6,13 @@ from utils.logger_config import setup_logger
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
-def cleanup_transcript_segments(input_file, output_file=None):
+def cleanup_transcript_segments(input_file, output_file=None, job_id=None):
+    # if job_id:
+    #     from utils.logger_config import get_job_logger
+    #     log = get_job_logger(logger, job_id)
+    # else:
+    #     log = logger
+
     if output_file is None:
         base_dir = os.path.dirname(input_file)
         base_name = os.path.splitext(os.path.basename(input_file))[0]
@@ -46,8 +52,5 @@ def cleanup_transcript_segments(input_file, output_file=None):
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)
-
-    logger.info(f"Cleanup complete. Removed {removed_count} merged segments, cleaned {cleaned_count} text entries.")
-    logger.info(f"Result saved to {output_file}")
 
     return output_file

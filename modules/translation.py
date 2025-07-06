@@ -2,14 +2,18 @@ import os
 import json
 import openai
 from utils.ai_utils import load_system_role_for_timestamped_translation
-from utils.logger_config import setup_logger
-
+from utils.logger_config import setup_logger, get_job_logger
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def translate_transcribed_segments(input_file, output_file=None, target_language=None,
-                                   model="gpt-4o", openai_api_key=None):
+                                   model="gpt-4o", openai_api_key=None, job_id=None):
+    if job_id:
+        log = get_job_logger(logger, job_id)
+    else:
+        log = logger
+
     if not openai_api_key:
         raise ValueError("OpenAI API key is required but not provided by user")
 
@@ -30,10 +34,6 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
     segments = transcript.get('segments', [])
     total_segments = len(segments)
 
-    logger.info(f"Starting translation of {total_segments} segments...")
-    logger.info(f"Target language: {target_language}")
-    logger.info(f"Using model: {model}")
-
     client = openai.OpenAI(api_key=openai_api_key)
 
     for i, segment in enumerate(segments):
@@ -48,7 +48,7 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
             f"Next segment text: {next_text} (provided for context only)"
         )
 
-        logger.info(f"Translating segment {i + 1}/{total_segments}: {current_text[:50]}...")
+        log.info(f"Translating segment {i + 1}/{total_segments}: {current_text[:50]}...")
 
         try:
             response = client.chat.completions.create(
@@ -65,10 +65,10 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
             segment["translated_text"] = translated_text
             segment["initial_translation"] = translated_text
 
-            logger.info(f"-> Translated: {translated_text[:50]}...")
+            log.info(f"-> Translated: {translated_text[:50]}...")
 
         except Exception as e:
-            logger.error(f"Error translating segment {i}: {e}")
+            log.error(f"Error translating segment {i}: {e}")
             raise ValueError(f"Failed to translate segment {i}: {str(e)}")
 
     translated_full_text = " ".join([s.get("translated_text", "") for s in segments])
@@ -80,7 +80,5 @@ def translate_transcribed_segments(input_file, output_file=None, target_language
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)
-
-    logger.info(f"Translation complete! Result saved to: {output_file}")
 
     return output_file

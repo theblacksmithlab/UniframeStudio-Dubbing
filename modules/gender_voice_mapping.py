@@ -8,6 +8,7 @@ from modules.voice_gender_classifier_model import ECAPA_gender
 from utils.logger_config import setup_logger
 from typing import Optional, Dict, Any
 
+
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
@@ -100,10 +101,6 @@ def get_simple_voice_mapping(gender: str):
 
 def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_path: str):
     try:
-        logger.info(f"Adding JaesungHuh gender analysis and OpenAI voice mapping...")
-        logger.info(f"Audio file: {audio_path}")
-        logger.info(f"Translation file: {translated_json_path}")
-
         if not os.path.exists(audio_path):
             logger.error(f"Audio file not found: {audio_path}")
             return False
@@ -181,8 +178,6 @@ def run_gender_and_voice_analysis_step(job_id, audio_path, translated_json_path,
         if tts_provider != "openai":
             logger.info(f"Skipping gender/voice analysis for TTS provider: {tts_provider}")
             return True
-
-        logger.info(f"Running JaesungHuh gender analysis for job {job_id}")
 
         success = add_gender_and_voice_mapping_to_segments(audio_path, translated_json_path)
 

@@ -9,10 +9,10 @@ import os
 import json
 from modules.job_status import get_or_create_job_status
 from dotenv import load_dotenv
-from utils.logger_config import setup_logger
-
+from utils.logger_config import setup_logger, get_job_logger
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
+
 
 app = FastAPI(title="Uniframe Studio Video Processing API", version="1.0.0")
 
@@ -50,7 +50,10 @@ class JobResult(BaseModel):
 
 @app.get("/job/{job_id}", response_model=JobStatus)
 async def get_job_status(job_id: str):
-    logger.info(f"Got status request for job: {job_id}")
+    job_logger = get_job_logger(logger, job_id)
+
+    job_logger.info(f"Got job status request")
+
     try:
         status_data = get_or_create_job_status(job_id)
 
@@ -73,7 +76,10 @@ async def get_job_status(job_id: str):
 
 @app.get("/job/{job_id}/result", response_model=JobResult)
 async def get_job_result(job_id: str):
-    logger.info(f"Got result request for job: {job_id}")
+    job_logger = get_job_logger(logger, job_id)
+
+    job_logger.info(f"Got job result request")
+
     try:
         status_data = get_or_create_job_status(job_id)
 
@@ -93,9 +99,13 @@ async def get_job_result(job_id: str):
 @app.post("/process-video", response_model=JobStatus)
 async def start_video_processing(request: ProcessVideoRequest):
     load_dotenv()
-    logger.info(f"Got new dubbing job request: {request.job_id}")
 
-    if not request.job_id:
+    job_id = request.job_id
+    job_logger = get_job_logger(logger, job_id)
+
+    job_logger.info(f"Got new dubbing job request")
+
+    if not job_id:
         raise HTTPException(status_code=400, detail="Job_id is required")
 
     if not request.video_url:
@@ -131,21 +141,21 @@ async def start_video_processing(request: ProcessVideoRequest):
             )
 
     os.makedirs("jobs", exist_ok=True)
-    os.makedirs(f"jobs/{request.job_id}", exist_ok=True)
+    os.makedirs(f"jobs/{job_id}", exist_ok=True)
 
-    job_status = get_or_create_job_status(request.job_id)
+    job_status = get_or_create_job_status(job_id)
 
-    job_params_path = f"jobs/{request.job_id}/job_params.json"
+    job_params_path = f"jobs/{job_id}/job_params.json"
     with open(job_params_path, "w") as f:
         json.dump(request.model_dump(), f)
 
-    with open(f"jobs/{request.job_id}/pending", "w") as f:
+    with open(f"jobs/{job_id}/pending", "w") as f:
         f.write(datetime.now().isoformat())
 
-    subprocess.Popen([sys.executable, "worker.py", "--job_id", request.job_id])
+    subprocess.Popen([sys.executable, "worker.py", "--job_id", job_id])
 
     return JobStatus(
-        job_id=request.job_id,
+        job_id=job_id,
         status=job_status["status"],
         created_at=job_status["created_at"],
         completed_at=job_status.get("completed_at"),
@@ -160,7 +170,7 @@ async def start_video_processing(request: ProcessVideoRequest):
 
 @app.get("/health")
 async def health_check():
-    logger.debug("Got health check request...")
+    logger.info("Got health check request...")
 
     return {
         "status": "healthy",

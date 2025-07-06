@@ -3,8 +3,7 @@ import json
 import openai
 from modules.tts_correction import regenerate_segment
 from utils.ai_utils import load_system_role_for_text_correction
-from utils.logger_config import setup_logger
-
+from utils.logger_config import setup_logger, get_job_logger
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
@@ -16,8 +15,10 @@ def correct_text_through_api(
         mode,
         previous_text="",
         next_text="",
-        openai_api_key=None
+        openai_api_key=None,
+        job_id=None,
 ):
+    log = get_job_logger(logger, job_id)
 
     if not openai_api_key:
         raise ValueError("OpenAI API key is required for text correction but not provided")
@@ -37,7 +38,7 @@ def correct_text_through_api(
               f"Original duration: {original_duration:.3f} seconds\n"
               f"TTS duration: {tts_duration:.3f} seconds\n")
 
-    logger.debug(f"Prompt: {prompt}")
+    log.debug(f"Prompt: {prompt}")
 
     try:
         client = openai.OpenAI(api_key=openai_api_key)
@@ -54,19 +55,21 @@ def correct_text_through_api(
         corrected_text = response.choices[0].message.content.strip()
 
         if not corrected_text:
-            logger.warning("API returned empty text, using original")
+            log.warning("API returned empty text, using original")
             return current_text
 
         return corrected_text
 
 
     except Exception as e:
-        logger.error(f"Error with OpenAI API: {e}")
+        log.error(f"Error with OpenAI API: {e}")
         raise ValueError(f"OpenAI API error: {str(e)}")
 
 
 def correct_segment_durations(translation_file, job_id, max_attempts=5, threshold=0.2, voice="onyx", dealer="openai",
                               elevenlabs_api_key=None, openai_api_key=None):
+    log = get_job_logger(logger, job_id)
+
     if not openai_api_key:
         raise ValueError("OpenAI API key is required for text correction but not provided")
 
@@ -77,7 +80,7 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
     segments_dir = os.path.join(base_dir, "audio_segments")
 
     for attempt in range(1, max_attempts + 1):
-        logger.info(f"\n=== Attempt {attempt}/{max_attempts} for correcting segment durations ===")
+        log.info(f"\n=== Attempt {attempt}/{max_attempts} for correcting segment durations ===")
 
         with open(translation_file, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -103,25 +106,25 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
                 })
 
         if not segments_needing_correction:
-            logger.info("All segments are within acceptable range. Correction complete!")
+            log.info("All segments are within acceptable range. Correction complete")
             return translation_file
 
-        logger.info(f"Found {len(segments_needing_correction)} segments that need correction")
+        log.info(f"Found {len(segments_needing_correction)} segments that need correction")
 
         for segment_data in segments_needing_correction:
             segment = segment_data["segment"]
             segment_id = segment_data["id"]
             mode = "reduce" if segment_data["needs_reduction"] else "expand"
 
-            logger.info(f"\nProcessing segment {segment_id}...")
-            logger.info(f"Original duration: {segment['original_duration']:.3f}s")
-            logger.info(f"TTS duration: {segment['tts_duration']:.3f}s")
-            logger.info(f"Difference: {segment_data['diff_ratio'] * 100:.1f}%")
-            logger.info(f"Action needed: {mode}")
+            log.info(f"\nProcessing segment {segment_id}...")
+            log.info(f"Original duration: {segment['original_duration']:.3f}s")
+            log.info(f"TTS duration: {segment['tts_duration']:.3f}s")
+            log.info(f"Difference: {segment_data['diff_ratio'] * 100:.1f}%")
+            log.info(f"Action needed: {mode}")
 
             segment_index = next((i for i, s in enumerate(segments) if s["id"] == segment_id), None)
             if segment_index is None:
-                logger.warning(f"Warning: Could not find segment {segment_id} in segments list")
+                log.warning(f"Warning: Could not find segment {segment_id} in segments list")
                 continue
 
             # test
@@ -143,6 +146,9 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
             previous_text = " ".join(previous_texts)
             next_text = " ".join(next_texts)
 
+            log.info(f"previous_text: {previous_text}")
+            log.info(f"next_text: {next_text}")
+
             try:
                 corrected_text = correct_text_through_api(
                     segment["translated_text"],
@@ -151,7 +157,8 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
                     mode,
                     previous_text,
                     next_text,
-                    openai_api_key=openai_api_key
+                    openai_api_key=openai_api_key,
+                    job_id=job_id,
                 )
 
                 data["segments"][segment_index]["translated_text"] = corrected_text
@@ -182,7 +189,7 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
                     with open(translation_file, "w", encoding="utf-8") as f:
                         json.dump(data, f, ensure_ascii=False, indent=2)
                 except IOError as e:
-                    logger.warning(f"Error saving corrected text: {e}")
+                    log.warning(f"Error saving corrected text: {e}")
                     continue
 
                 segment_audio_file = os.path.join(segments_dir, f"segment_{segment_id}.mp3")
@@ -193,17 +200,18 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
 
                     if suggested_voice:
                         segment_voice = suggested_voice
-                        logger.info(
-                            f"Using analyzed voice '{segment_voice}' for segment {segment_id} correction (gender: {segment.get('predicted_gender', 'unknown')}, confidence: {confidence:.2f})")
+                        log.info(
+                            f"Using analyzed voice '{segment_voice}' for segment {segment_id} correction (gender: {segment.get('predicted_gender', 'unknown')}, confidence: {confidence:.2f})"
+                        )
                     else:
                         segment_voice = voice
-                        logger.info(
+                        log.info(
                             f"Using fallback voice '{voice}' for segment {segment_id} correction (no voice analysis)")
                 else:
                     segment_voice = voice
-                    logger.info(f"Using ElevenLabs voice '{voice}' for segment {segment_id} correction")
+                    log.info(f"Using ElevenLabs voice '{voice}' for segment {segment_id} correction")
 
-                logger.info(f"Regenerating audio for segment {segment_id} with voice: {segment_voice}")
+                log.info(f"Regenerating audio for segment {segment_id} with voice: {segment_voice}")
                 result = regenerate_segment(
                     translation_file,
                     job_id,
@@ -216,20 +224,20 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
                 )
 
                 if not result:
-                    logger.warning(f"Failed to regenerate segment {segment_id}")
+                    log.warning(f"Failed to regenerate segment {segment_id}")
                     continue
 
                 try:
                     with open(translation_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
                 except (json.JSONDecodeError, FileNotFoundError, IOError) as e:
-                    logger.warning(f"Error reading updated translation file: {e}")
+                    log.warning(f"Error reading updated translation file: {e}")
                     continue
 
                 segments = data.get("segments", [])
 
             except Exception as e:
-                logger.warning(f"Error processing segment {segment_id}: {e}")
+                log.warning(f"Error processing segment {segment_id}: {e}")
                 continue
 
     try:
@@ -260,21 +268,21 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
             })
 
     if remaining_issues:
-        logger.info(
+        log.info(
             f"\nWARNING: After {max_attempts} attempts, {len(remaining_issues)} segments still need manual correction:")
         for issue in remaining_issues:
-            logger.info(f"  - Segment {issue['id']}: {issue['start']:.2f}s - {issue['end']:.2f}s")
-            logger.info(f"    Original: {issue['original_duration']:.3f}s, TTS: {issue['tts_duration']:.3f}s")
-            logger.info(f"    Difference: {issue['diff_percentage']:.1f}%")
+            log.info(f"  - Segment {issue['id']}: {issue['start']:.2f}s - {issue['end']:.2f}s")
+            log.info(f"    Original: {issue['original_duration']:.3f}s, TTS: {issue['tts_duration']:.3f}s")
+            log.info(f"    Difference: {issue['diff_percentage']:.1f}%")
 
     if dealer.lower() == "openai":
         correction_voice_stats = {}
         total_corrections = len(segments_needing_correction) if 'segments_needing_correction' in locals() else 0
 
         if total_corrections > 0:
-            logger.info("=" * 50)
-            logger.info("SEGMENT CORRECTION VOICE STATISTICS")
-            logger.info("=" * 50)
+            log.info("=" * 50)
+            log.info("SEGMENT CORRECTION VOICE STATISTICS")
+            log.info("=" * 50)
 
             for segment_data in segments_needing_correction:
                 segment = segment_data["segment"]
@@ -283,6 +291,6 @@ def correct_segment_durations(translation_file, job_id, max_attempts=5, threshol
 
             for voice_name, count in correction_voice_stats.items():
                 percentage = (count / total_corrections) * 100
-                logger.info(f"Corrections with voice '{voice_name}': {count}/{total_corrections} ({percentage:.1f}%)")
+                log.info(f"Corrections with voice '{voice_name}': {count}/{total_corrections} ({percentage:.1f}%)")
 
     return translation_file

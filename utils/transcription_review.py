@@ -73,7 +73,7 @@ def get_review_result(job_id: str, original_translated_transcription: str) -> st
     logger.info(f"Starting review process for job {job_id}")
     logger.info(f"Original transcription: {original_translated_transcription}")
 
-    current_step = 10
+    current_step = 11
 
     try:
         review_required_s3_url = upload_transcription_for_review(job_id, original_translated_transcription)

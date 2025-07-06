@@ -2,9 +2,10 @@ import json
 import os
 import re
 import openai
-
 from utils.ai_utils import load_system_role_for_sentence_boundaries
 from utils.logger_config import setup_logger
+from utils.logger_config import get_job_logger
+
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
@@ -51,7 +52,12 @@ def filter_words_by_timeframe(words_array, segment_start, segment_end):
     return filtered_words
 
 
-def call_llm_for_sentence_boundaries(sentence, words_array, openai_api_key, model="gpt-4o"):
+def call_llm_for_sentence_boundaries(sentence, words_array, openai_api_key, model="gpt-4o", job_id=None):
+    if job_id:
+        log = get_job_logger(logger, job_id)
+    else:
+        log = logger
+
     try:
         words_for_llm = []
         for i, word in enumerate(words_array):
@@ -68,8 +74,7 @@ def call_llm_for_sentence_boundaries(sentence, words_array, openai_api_key, mode
         СЛОВА СЕГМЕНТА ({len(words_for_llm)} слов):
         {json.dumps(words_for_llm, ensure_ascii=False, indent=1)}"""
 
-        logger.info(f"Calling LLM for sentence: '{sentence[:50]}...'")
-        logger.debug(f"DEBUG request for LLM:\n{user_prompt}")
+        log.info(f"Calling LLM for sentence: '{sentence[:50]}...'")
 
         client = openai.OpenAI(api_key=openai_api_key)
 
@@ -85,36 +90,41 @@ def call_llm_for_sentence_boundaries(sentence, words_array, openai_api_key, mode
         )
 
         llm_response = response.choices[0].message.content.strip()
-        logger.debug(f"LLM response: {llm_response}")
+        # log.debug(f"LLM response: {llm_response}")
 
         result = json.loads(llm_response)
 
         if "start_time" not in result or "end_time" not in result:
             raise KeyError("Missing start_time or end_time in LLM response")
 
-        logger.info(f"LLM found boundaries: {result['start_time']:.2f} - {result['end_time']:.2f}")
+        log.info(f"LLM found boundaries: {result['start_time']:.2f} - {result['end_time']:.2f}")
         return result
 
     except json.JSONDecodeError as e:
-        logger.error(f"CRITICAL: Failed to parse guaranteed JSON response: {e}")
-        logger.error(f"Raw LLM response: {llm_response if 'llm_response' in locals() else 'N/A'}")
+        log.error(f"CRITICAL: Failed to parse guaranteed JSON response: {e}")
+        log.error(f"Raw LLM response: {llm_response if 'llm_response' in locals() else 'N/A'}")
         return None
 
     except KeyError as e:
-        logger.error(f"LLM returned valid JSON but missing required fields: {e}")
-        logger.error(f"LLM response: {llm_response if 'llm_response' in locals() else 'N/A'}")
+        log.error(f"LLM returned valid JSON but missing required fields: {e}")
+        log.error(f"LLM response: {llm_response if 'llm_response' in locals() else 'N/A'}")
         return None
 
     except FileNotFoundError as e:
-        logger.error(f"System role file not found: {e}")
+        log.error(f"System role file not found: {e}")
         return None
 
     except Exception as e:
-        logger.error(f"LLM call failed: {e}")
+        log.error(f"LLM call failed: {e}")
         return None
 
 
-def get_sentence_timestamps_with_llm(sentence, segment, words_list, openai_api_key, model="gpt-4o"):
+def get_sentence_timestamps_with_llm(sentence, segment, words_list, openai_api_key, model="gpt-4o", job_id=None):
+    if job_id:
+        log = get_job_logger(logger, job_id)
+    else:
+        log = logger
+
     sentence = sentence.strip()
     if not sentence:
         return None
@@ -122,40 +132,40 @@ def get_sentence_timestamps_with_llm(sentence, segment, words_list, openai_api_k
     segment_start = segment.get("start", 0)
     segment_end = segment.get("end", 0)
 
-    logger.info(f"Processing sentence with LLM: '{sentence[:50]}...'")
+    log.info(f"Processing sentence with LLM: '{sentence[:50]}...'")
 
     segment_words = filter_words_by_timeframe(words_list, segment_start, segment_end)
 
     if not segment_words:
-        logger.warning(f"No words found in timeframe {segment_start:.2f}-{segment_end:.2f}")
+        log.warning(f"No words found in timeframe {segment_start:.2f}-{segment_end:.2f}")
         return None
 
-    logger.info(f"Found {len(segment_words)} words in segment timeframe")
+    log.info(f"Found {len(segment_words)} words in segment timeframe")
 
-    llm_result = call_llm_for_sentence_boundaries(sentence, segment_words, openai_api_key, model)
+    llm_result = call_llm_for_sentence_boundaries(sentence, segment_words, openai_api_key, model, job_id=job_id)
 
     if not llm_result:
-        logger.warning(f"LLM failed to find boundaries for sentence: {sentence[:30]}...")
+        log.warning(f"LLM failed to find boundaries for sentence: {sentence[:30]}...")
         return None
 
     start_time = llm_result.get("start_time")
     end_time = llm_result.get("end_time")
 
     if start_time is None or end_time is None:
-        logger.warning(f"LLM returned null timestamps for sentence: {sentence[:30]}...")
+        log.warning(f"LLM returned null timestamps for sentence: {sentence[:30]}...")
         return None
 
     if not isinstance(start_time, (int, float)) or not isinstance(end_time, (int, float)):
-        logger.warning(f"LLM returned non-numeric timestamps for sentence: {sentence[:30]}...")
+        log.warning(f"LLM returned non-numeric timestamps for sentence: {sentence[:30]}...")
         return None
 
     if start_time >= end_time:
-        logger.warning(f"LLM returned invalid time order for sentence: {sentence[:30]}...")
+        log.warning(f"LLM returned invalid time order for sentence: {sentence[:30]}...")
         return None
 
     buffer = 5.0
     if start_time < segment_start - buffer or end_time > segment_end + buffer:
-        logger.warning(f"LLM returned timestamps outside reasonable range for sentence: {sentence[:30]}...")
+        log.warning(f"LLM returned timestamps outside reasonable range for sentence: {sentence[:30]}...")
         return None
 
     min_duration = 0.5
@@ -165,13 +175,18 @@ def get_sentence_timestamps_with_llm(sentence, segment, words_list, openai_api_k
     final_start = max(start_time, segment_start)
     final_end = min(end_time, segment_end)
 
-    logger.info(f"LLM successfully found timestamps: {final_start:.2f} - {final_end:.2f}")
+    log.info(f"LLM successfully found timestamps: {final_start:.2f} - {final_end:.2f}")
 
     return {"start": final_start, "end": final_end}
 
 
 def optimize_transcription_segments(transcription_file, output_file=None,
-                                    openai_api_key=None, model="gpt-4o"):
+                                    openai_api_key=None, model="gpt-4o", job_id=None):
+    if job_id:
+        log = get_job_logger(logger, job_id)
+    else:
+        log = logger
+
     if not openai_api_key:
         raise ValueError("OpenAI API key is required for LLM-powered segmentation but not provided")
 
@@ -187,9 +202,9 @@ def optimize_transcription_segments(transcription_file, output_file=None,
     segments = data.get("segments", [])
     words_list = data.get("words", [])
 
-    logger.info(f"Optimizing {len(segments)} transcription segments with LLM...")
-    logger.info(f"Total words available: {len(words_list)}")
-    logger.info(f"Using model: {model}")
+    log.info(f"Optimizing {len(segments)} transcription segments with LLM...")
+    log.info(f"Total words available: {len(words_list)}")
+    log.info(f"Using model: {model}")
 
     # STEP 1: Split segments into sentences with LLM-powered precise timestamps
     raw_segments = []
@@ -201,7 +216,7 @@ def optimize_transcription_segments(transcription_file, output_file=None,
         segment_text = segment.get("text", "").strip()
         sentences = split_into_sentences(segment_text)
 
-        logger.info(
+        log.info(
             f"Processing segment {segment.get('id', 'unknown')}: '{segment_text[:50]}...' -> {len(sentences)} sentences")
 
         if len(sentences) <= 1:
@@ -216,7 +231,7 @@ def optimize_transcription_segments(transcription_file, output_file=None,
 
             for sentence in sentences:
                 timestamps = get_sentence_timestamps_with_llm(sentence, segment, words_list,
-                                                              openai_api_key, model)
+                                                              openai_api_key, model, job_id=job_id)
 
                 if timestamps:
                     sentence_segments.append({
@@ -230,7 +245,7 @@ def optimize_transcription_segments(transcription_file, output_file=None,
 
             if all_sentences_processed:
                 raw_segments.extend(sentence_segments)
-                logger.info(
+                log.info(
                     f"Successfully split segment {segment.get('id', 'unknown')} into {len(sentence_segments)} sentences")
             else:
                 raw_segments.append({
@@ -238,12 +253,12 @@ def optimize_transcription_segments(transcription_file, output_file=None,
                     "end": segment.get("end", 0),
                     "text": segment_text
                 })
-                logger.warning(
+                log.warning(
                     f"LLM failed to process segment {segment.get('id', 'unknown')}, keeping it whole: {segment_text[:50]}...")
 
     raw_segments.sort(key=lambda x: x["start"])
 
-    logger.info(f"After LLM sentence splitting: {len(raw_segments)} segments")
+    log.info(f"After LLM sentence splitting: {len(raw_segments)} segments")
 
     # STEP 2: Merge short segments based on word count OR duration and time gaps
     merged_segments = []
@@ -296,7 +311,7 @@ def optimize_transcription_segments(transcription_file, output_file=None,
             "end": current_end,
             "text": current_text
         })
-    logger.info(f"After merging short segments: {len(merged_segments)} segments")
+    log.info(f"After merging short segments: {len(merged_segments)} segments")
 
     # STEP 3: Assign IDs and fix any overlapping segments
     new_segments = []
@@ -313,9 +328,9 @@ def optimize_transcription_segments(transcription_file, output_file=None,
         next_seg = new_segments[i + 1]
 
         if current_seg["end"] > next_seg["start"]:
-            logger.error(f"UNEXPECTED OVERLAP detected between segments {i} and {i + 1}!")
-            logger.error(f"Segment {i}: {current_seg['end']:.2f}, Segment {i + 1}: {next_seg['start']:.2f}")
-            logger.error(f"This indicates a problem in LLM timestamp detection!")
+            log.error(f"UNEXPECTED OVERLAP detected between segments {i} and {i + 1}!")
+            log.error(f"Segment {i}: {current_seg['end']:.2f}, Segment {i + 1}: {next_seg['start']:.2f}")
+            log.error(f"This indicates a problem in LLM timestamp detection!")
 
             overlap_mid = (current_seg["end"] + next_seg["start"]) / 2
             gap = 0.05
@@ -323,7 +338,7 @@ def optimize_transcription_segments(transcription_file, output_file=None,
             current_seg["end"] = overlap_mid - gap / 2
             next_seg["start"] = overlap_mid + gap / 2
 
-            logger.warning(f"Fixed overlap between segments {i} and {i + 1}: "
+            log.warning(f"Fixed overlap between segments {i} and {i + 1}: "
                            f"set boundary at {overlap_mid:.2f}s with {gap * 1000:.0f}ms gap")
 
     result = {
@@ -337,7 +352,6 @@ def optimize_transcription_segments(transcription_file, output_file=None,
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
-    logger.info(f"LLM-powered transcription optimization complete! {len(new_segments)} segments created.")
-    logger.info(f"Result saved to: {output_file}")
+    log.info(f"LLM-powered transcription optimization complete! {len(new_segments)} segments created.")
 
     return output_file
