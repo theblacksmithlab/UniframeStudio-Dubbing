@@ -221,12 +221,12 @@ def transcribe(job_id, file_path, source_language=None, openai_api_key=None, tra
     else:
         language = None
 
-    # base_prompt = "Add proper punctuation. Ignore music in the beginning"
-    # if transcription_keywords:
-    #     prompt = f"Keywords for transcription: {transcription_keywords}. {base_prompt}"
-    #     log.info(f"Using keywords: {transcription_keywords}")
-    # else:
-    #     prompt = base_prompt
+    base_prompt = "Add proper punctuation. Ignore music in the beginning"
+    if transcription_keywords:
+        prompt = f"Keywords for transcription: {transcription_keywords}. {base_prompt}"
+        log.info(f"Using keywords: {transcription_keywords}")
+    else:
+        prompt = base_prompt
 
     try:
         client = openai.OpenAI(api_key=openai_api_key)
@@ -237,7 +237,8 @@ def transcribe(job_id, file_path, source_language=None, openai_api_key=None, tra
                 "file": audio_file,
                 "response_format": "verbose_json",
                 "timestamp_granularities": ["segment", "word"],
-                "temperature": 0.0
+                "temperature": 0.0,
+                "prompt": prompt
             }
 
             if language:
@@ -277,13 +278,6 @@ def transcribe(job_id, file_path, source_language=None, openai_api_key=None, tra
 
         if not result.get("text") and not result.get("segments") and not result.get("words"):
             raise ValueError(f"Empty transcription result for {file_path}")
-
-        with open(file_path) as f:
-            data = json.load(f)
-
-        for segment in data["segments"]:
-            print(f"Сегмент: {segment.get('avg_logprob', 'N/A')}, "
-                  f"compression: {segment.get('compression_ratio', 'N/A')}")
 
         return result
     except Exception as e:
