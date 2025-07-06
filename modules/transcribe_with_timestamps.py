@@ -221,7 +221,7 @@ def transcribe(job_id, file_path, source_language=None, openai_api_key=None, tra
     else:
         language = None
 
-    base_prompt = "Add proper punctuation."
+    base_prompt = "Add proper punctuation. Ignore music in the beginning"
     if transcription_keywords:
         prompt = f"Keywords for transcription: {transcription_keywords}. {base_prompt}"
         log.info(f"Using keywords: {transcription_keywords}")
@@ -237,7 +237,7 @@ def transcribe(job_id, file_path, source_language=None, openai_api_key=None, tra
                 "file": audio_file,
                 "response_format": "verbose_json",
                 "timestamp_granularities": ["segment", "word"],
-                "temperature": 0.1,
+                "temperature": 0.0,
                 "prompt": prompt
             }
 
