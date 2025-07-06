@@ -14,20 +14,22 @@ logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 class JaesungGenderClassifier:
 
-    def __init__(self):
+    def __init__(self, job_id):
         self.model = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        logger.info(f"Initializing JaesungHuh gender classifier on device: {self.device}")
+        self.log = get_job_logger(logger, job_id)
+        self.job_id = job_id
+        self.log.info(f"Initializing JaesungHuh gender classifier on device: {self.device}")
 
     def load_model(self):
         try:
-            logger.info("Loading JaesungHuh/voice-gender-classifier model...")
+            self.log.info("Loading JaesungHuh/voice-gender-classifier model...")
 
             self.model = ECAPA_gender.from_pretrained("JaesungHuh/voice-gender-classifier")
             self.model.eval()
             self.model.to(self.device)
 
-            logger.info("JaesungHuh gender classification model loaded successfully!")
+            self.log.info("JaesungHuh gender classification model loaded successfully!")
             return True
 
         except Exception as e:
@@ -57,7 +59,7 @@ class JaesungGenderClassifier:
                 with torch.no_grad():
                     output = self.model.predict(temp_path, device=self.device)
 
-                logger.info(f"Model output: {output}")
+                self.log.info(f"Model output: {output}")
 
                 if output:
                     gender_str = str(output).lower().strip()
@@ -78,7 +80,7 @@ class JaesungGenderClassifier:
                         "raw_output": str(output)
                     }
                 else:
-                    logger.warning(f"No output from model for segment {start_time}-{end_time}")
+                    self.log.warning(f"No output from model for segment {start_time}-{end_time}")
                     return None
 
             finally:
@@ -86,7 +88,7 @@ class JaesungGenderClassifier:
                     os.unlink(temp_path)
 
         except Exception as e:
-            logger.error(f"Error predicting gender for segment {start_time}-{end_time}: {e}")
+            self.log.error(f"Error predicting gender for segment {start_time}-{end_time}: {e}")
             return None
 
 
@@ -99,11 +101,8 @@ def get_simple_voice_mapping(gender: str):
         return "onyx"
 
 
-def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_path: str, job_id=None):
-    if job_id:
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_path: str, job_id):
+    log = get_job_logger(logger, job_id)
 
     try:
         if not os.path.exists(audio_path):
@@ -124,7 +123,7 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
 
         log.info(f"Found {len(segments)} segments to analyze")
 
-        gender_classifier = JaesungGenderClassifier()
+        gender_classifier = JaesungGenderClassifier(job_id)
 
         successful_analyses = 0
         voice_stats = {}
@@ -178,18 +177,15 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
         return False
 
 
-def run_gender_and_voice_analysis_step(audio_path, translated_json_path, tts_provider, job_id=None, ):
-    if job_id:
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def run_gender_and_voice_analysis_step(job_id, audio_path, translated_json_path, tts_provider):
+    log = get_job_logger(logger, job_id)
 
     try:
         if tts_provider != "openai":
             log.info(f"Skipping gender/voice analysis for TTS provider: {tts_provider}")
             return True
 
-        success = add_gender_and_voice_mapping_to_segments(audio_path, translated_json_path, job_id=job_id)
+        success = add_gender_and_voice_mapping_to_segments(audio_path, translated_json_path, job_id)
 
         if success:
             log.info(f"JaesungHuh gender analysis completed successfully for job")
