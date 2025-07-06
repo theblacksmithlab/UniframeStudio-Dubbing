@@ -5,7 +5,7 @@ import torch
 import librosa
 import soundfile as sf
 from modules.voice_gender_classifier_model import ECAPA_gender
-from utils.logger_config import setup_logger
+from utils.logger_config import setup_logger, get_job_logger
 from typing import Optional, Dict, Any
 
 
@@ -99,14 +99,19 @@ def get_simple_voice_mapping(gender: str):
         return "onyx"
 
 
-def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_path: str):
+def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_path: str, job_id=None):
+    if job_id:
+        log = get_job_logger(logger, job_id)
+    else:
+        log = logger
+
     try:
         if not os.path.exists(audio_path):
-            logger.error(f"Audio file not found: {audio_path}")
+            log.error(f"Audio file not found: {audio_path}")
             return False
 
         if not os.path.exists(translated_json_path):
-            logger.error(f"Translation file not found: {translated_json_path}")
+            log.error(f"Translation file not found: {translated_json_path}")
             return False
 
         with open(translated_json_path, 'r', encoding='utf-8') as f:
@@ -114,10 +119,10 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
 
         segments = data.get("segments", data) if isinstance(data, dict) else data
         if not segments:
-            logger.error("No segments found")
+            log.error("No segments found")
             return False
 
-        logger.info(f"Found {len(segments)} segments to analyze")
+        log.info(f"Found {len(segments)} segments to analyze")
 
         gender_classifier = JaesungGenderClassifier()
 
@@ -126,7 +131,7 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
 
         for i, segment in enumerate(segments):
             if i % 5 == 0:
-                logger.info(f"Processing segment {i + 1}/{len(segments)}")
+                log.info(f"Processing segment {i + 1}/{len(segments)}")
 
             start_time = segment.get("start", 0)
             end_time = segment.get("end", 0)
@@ -143,13 +148,13 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
                 voice_stats[suggested_voice] = voice_stats.get(suggested_voice, 0) + 1
                 successful_analyses += 1
 
-                logger.info(
+                log.info(
                     f"Segment {i + 1}: {analysis['predicted_gender']} ({analysis['gender_confidence']:.2f}) -> {suggested_voice}")
             else:
                 segment["predicted_gender"] = "unknown"
                 segment["gender_confidence"] = 0.0
                 segment["suggested_voice"] = "onyx"
-                logger.warning(f"Segment {i + 1}: failed to analyze")
+                log.warning(f"Segment {i + 1}: failed to analyze")
 
         with open(translated_json_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -159,10 +164,10 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
             gender = segment.get("predicted_gender", "unknown")
             gender_stats[gender] = gender_stats.get(gender, 0) + 1
 
-        logger.info(f"JaesungHuh gender analysis completed!")
-        logger.info(f"Successfully analyzed: {successful_analyses}/{len(segments)} segments")
-        logger.info(f"Gender distribution: {gender_stats}")
-        logger.info(f"Voice mapping: {voice_stats}")
+        log.info(f"JaesungHuh gender analysis completed!")
+        log.info(f"Successfully analyzed: {successful_analyses}/{len(segments)} segments")
+        log.info(f"Gender distribution: {gender_stats}")
+        log.info(f"Voice mapping: {voice_stats}")
 
         return True
 
@@ -173,21 +178,26 @@ def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_pa
         return False
 
 
-def run_gender_and_voice_analysis_step(job_id, audio_path, translated_json_path, tts_provider):
+def run_gender_and_voice_analysis_step(audio_path, translated_json_path, tts_provider, job_id=None, ):
+    if job_id:
+        log = get_job_logger(logger, job_id)
+    else:
+        log = logger
+
     try:
         if tts_provider != "openai":
-            logger.info(f"Skipping gender/voice analysis for TTS provider: {tts_provider}")
+            log.info(f"Skipping gender/voice analysis for TTS provider: {tts_provider}")
             return True
 
-        success = add_gender_and_voice_mapping_to_segments(audio_path, translated_json_path)
+        success = add_gender_and_voice_mapping_to_segments(audio_path, translated_json_path, job_id=job_id)
 
         if success:
-            logger.info(f"JaesungHuh gender analysis completed successfully for job {job_id}")
+            log.info(f"JaesungHuh gender analysis completed successfully for job")
         else:
-            logger.error(f"JaesungHuh gender analysis failed for job {job_id}")
+            log.error(f"JaesungHuh gender analysis failed for job")
 
         return success
 
     except Exception as e:
-        logger.error(f"Error in JaesungHuh gender analysis step for job {job_id}: {e}")
+        log.error(f"Error in JaesungHuh gender analysis step for job: {e}")
         return False

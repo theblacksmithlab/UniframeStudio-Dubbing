@@ -10,8 +10,10 @@ class SafeJobFormatter(logging.Formatter):
             record.job_id = '-'
         return super().format(record)
 
+
 def get_job_logger(base_logger, job_id):
     return logging.LoggerAdapter(base_logger, {"job_id": job_id})
+
 
 def setup_logger(name=None, log_file=None, level=logging.INFO):
     logger = logging.getLogger(name)
