@@ -87,7 +87,7 @@ def regenerate_segment(translation_file, job_id, segment_id, output_audio_file=N
         if dealer.lower() == "openai":
             client = openai.OpenAI(api_key=openai_api_key)
 
-            generate_openai_tts_with_retry(client, text, voice, temp_file, job_id=job_id)
+            generate_openai_tts_with_retry(client, text, voice, temp_file, job_id)
 
         elif dealer.lower() == "elevenlabs":
             request_data = {

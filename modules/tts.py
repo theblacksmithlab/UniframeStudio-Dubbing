@@ -83,7 +83,7 @@ def generate_tts_for_segments(translation_file, job_id, output_audio_file=None, 
 
         try:
             if dealer.lower() == "openai":
-                generate_openai_tts_with_retry(openai_client, text, segment_voice, temp_file, job_id=job_id)
+                generate_openai_tts_with_retry(openai_client, text, segment_voice, temp_file, job_id)
 
             elif dealer.lower() == "elevenlabs":
                 previous_text = ""
@@ -432,11 +432,8 @@ def make_api_request_with_retry(url, data, headers, max_retries=10, retry_delay=
         raise Exception(f"Failed after {max_retries} attempts. Last error: {last_exception}")
 
 
-def generate_openai_tts_with_retry(client, text, voice, temp_file, max_retries=10, retry_delay=2, job_id=None):
-    if job_id:
-        log = get_job_logger(logger, job_id)
-    else:
-        log = logger
+def generate_openai_tts_with_retry(client, text, voice, temp_file, job_id, max_retries=10, retry_delay=2):
+    log = get_job_logger(logger, job_id)
 
     retries = 0
     last_exception = None
