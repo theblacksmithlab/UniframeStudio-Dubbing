@@ -30,16 +30,23 @@ def detect_speech_start_with_vad(audio_path, job_id):
             force_reload=False
         )
 
-        # Загружаем аудио
+        # Загружаем аудио с правильным sample rate
         log.info(f"Analyzing audio file: {audio_path}")
-        wav, sr = torchaudio.load(audio_path)
+        wav, original_sr = torchaudio.load(audio_path)
+
+        # Silero VAD требует 16kHz или 8kHz
+        target_sr = 16000
+        if original_sr != target_sr:
+            log.info(f"Resampling from {original_sr}Hz to {target_sr}Hz for VAD")
+            resampler = torchaudio.transforms.Resample(original_sr, target_sr)
+            wav = resampler(wav)
 
         # Получаем speech timestamps
-        speech_timestamps = utils[0](wav, model, sampling_rate=sr)
+        speech_timestamps = utils[0](wav, model, sampling_rate=target_sr)
 
         if speech_timestamps:
-            speech_start = speech_timestamps[0]['start'] / sr  # в секундах
-            speech_end = speech_timestamps[-1]['end'] / sr
+            speech_start = speech_timestamps[0]['start'] / target_sr  # используем target_sr
+            speech_end = speech_timestamps[-1]['end'] / target_sr
 
             log.info(f"✅ Speech detected from {speech_start:.2f}s to {speech_end:.2f}s")
             log.info(f"📈 Total speech segments found: {len(speech_timestamps)}")
