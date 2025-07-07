@@ -21,9 +21,14 @@ def detect_speech_start_with_vad(audio_path, job_id):
     log = get_job_logger(logger, job_id)
 
     try:
-        # Загружаем Silero VAD модель
+        # Загружаем Silero VAD модель с правильным репозиторием
         log.info("Loading Silero VAD model...")
-        model, utils = torch.hub.load('silero-ai/vad', 'silero_vad', force_reload=False)
+        model, utils = torch.hub.load(
+            repo_or_dir='snakers4/silero-vad',
+            model='silero_vad',
+            trust_repo=True,
+            force_reload=False
+        )
 
         # Загружаем аудио
         log.info(f"Analyzing audio file: {audio_path}")
