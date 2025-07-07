@@ -94,11 +94,11 @@ class JaesungGenderClassifier:
 
 def get_simple_voice_mapping(gender: str):
     if gender == "male":
-        return "echo"
+        return "ash"
     elif gender == "female":
         return "shimmer"
     else:
-        return "echo"
+        return "ash"
 
 
 def add_gender_and_voice_mapping_to_segments(audio_path: str, translated_json_path: str, job_id):
