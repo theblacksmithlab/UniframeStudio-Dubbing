@@ -50,7 +50,7 @@ def detect_speech_start_with_vad(audio_path, job_id):
             min_speech_duration_ms=250,  # минимальная длительность речи (мс)
             min_silence_duration_ms=100,  # минимальная длительность тишины (мс)
             window_size_samples=512,  # размер окна для анализа
-            speech_pad_ms=50,  # добавить мс ДО и ПОСЛЕ речи
+            speech_pad_ms=100,  # добавить мс ДО и ПОСЛЕ речи
         )
 
         if speech_timestamps:
