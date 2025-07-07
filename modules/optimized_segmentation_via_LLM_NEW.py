@@ -172,6 +172,89 @@ def get_sentence_timestamps_with_llm(job_id, sentence, segment, words_list, open
     return {"start": final_start, "end": final_end}
 
 
+def validate_sentence_segments(sentence_segments, original_segment, prev_segment=None, next_segment=None):
+    if not sentence_segments:
+        return False
+
+    # 1. Проверка внутренних overlap'ов между предложениями
+    for i in range(len(sentence_segments) - 1):
+        current_end = sentence_segments[i]["end"]
+        next_start = sentence_segments[i + 1]["start"]
+
+        if current_end > next_start:
+            return False  # Overlap между предложениями
+
+    # 2. Проверка что все предложения в пределах исходного сегмента
+    first_start = sentence_segments[0]["start"]
+    last_end = sentence_segments[-1]["end"]
+
+    if first_start < original_segment["start"] or last_end > original_segment["end"]:
+        return False  # Выход за границы исходного сегмента
+
+    # 3. Проверка с предыдущим сегментом
+    if prev_segment and first_start < prev_segment["end"]:
+        return False  # Overlap с предыдущим сегментом
+
+    # 4. Проверка со следующим сегментом
+    if next_segment and last_end > next_segment["start"]:
+        return False  # Overlap со следующим сегментом
+
+    return True
+
+
+def process_segment_with_retry(job_id, segment, words_list, openai_api_key, model,
+                               prev_segment=None, next_segment=None, max_retries=3):
+    log = get_job_logger(logger, job_id)
+
+    segment_text = segment.get("text", "").strip()
+    sentences = split_into_sentences(segment_text)
+
+
+    if len(sentences) <= 1:
+        return [segment]
+
+    log.info(f"Attempting to split segment {segment.get('id', 'unknown')} into {len(sentences)} sentences")
+
+    # Пытаемся разбить сегмент до max_retries раз
+    for attempt in range(max_retries):
+        log.info(f"Attempt {attempt + 1}/{max_retries} for segment {segment.get('id', 'unknown')}")
+
+        sentence_segments = []
+        all_sentences_processed = True
+
+        # Обрабатываем каждое предложение через LLM
+        for sentence in sentences:
+            timestamps = get_sentence_timestamps_with_llm(job_id, sentence, segment, words_list,
+                                                          openai_api_key, model)
+
+            if timestamps:
+                sentence_segments.append({
+                    "start": timestamps["start"],
+                    "end": timestamps["end"],
+                    "text": sentence
+                })
+            else:
+                all_sentences_processed = False
+                break
+
+        # Если LLM не справился с каким-то предложением
+        if not all_sentences_processed:
+            log.warning(f"LLM failed to process some sentences in attempt {attempt + 1}")
+            continue
+
+        # Валидируем полученные временные метки
+        if validate_sentence_segments(sentence_segments, segment, prev_segment, next_segment):
+            log.info(
+                f"Successfully split segment {segment.get('id', 'unknown')} into {len(sentence_segments)} sentences on attempt {attempt + 1}")
+            return sentence_segments
+        else:
+            log.warning(f"Validation failed for segment {segment.get('id', 'unknown')} on attempt {attempt + 1}")
+
+    # Если все попытки провалились - возвращаем исходный сегмент
+    log.warning(f"All {max_retries} attempts failed for segment {segment.get('id', 'unknown')}, keeping original")
+    return [segment]
+
+
 def optimize_transcription_segments(transcription_file, job_id, output_file=None,
                                     openai_api_key=None, model="gpt-4o"):
     log = get_job_logger(logger, job_id)
@@ -195,59 +278,29 @@ def optimize_transcription_segments(transcription_file, job_id, output_file=None
     log.info(f"Total words available: {len(words_list)}")
     log.info(f"Using model: {model}")
 
-    # STEP 1: Split segments into sentences with LLM-powered precise timestamps
+    # STEP 1: Split segments into sentences with LLM-powered precise timestamps + validation
     raw_segments = []
 
-    for segment in segments:
-        if "merged" in segment and segment["merged"]:
-            continue
+    segments_to_process = [seg for seg in segments if not seg.get("merged", False)]
 
-        segment_text = segment.get("text", "").strip()
-        sentences = split_into_sentences(segment_text)
+    log.info(f"Processing {len(segments_to_process)} segments (skipping merged ones)")
 
-        log.info(
-            f"Processing segment {segment.get('id', 'unknown')}: '{segment_text[:50]}...' -> {len(sentences)} sentences")
+    for i, segment in enumerate(segments_to_process):
+        prev_segment = raw_segments[-1] if raw_segments else None
+        next_segment = segments_to_process[i + 1] if i + 1 < len(segments_to_process) else None
 
-        if len(sentences) <= 1:
-            raw_segments.append({
-                "start": segment.get("start", 0),
-                "end": segment.get("end", 0),
-                "text": segment_text
-            })
-        else:
-            all_sentences_processed = True
-            sentence_segments = []
+        log.info(f"Processing segment {segment.get('id', 'unknown')}: '{segment.get('text', '')[:50]}...'")
 
-            for sentence in sentences:
-                timestamps = get_sentence_timestamps_with_llm(job_id, sentence, segment, words_list,
-                                                              openai_api_key, model)
+        processed_segments = process_segment_with_retry(
+            job_id, segment, words_list, openai_api_key, model,
+            prev_segment, next_segment
+        )
 
-                if timestamps:
-                    sentence_segments.append({
-                        "start": timestamps["start"],
-                        "end": timestamps["end"],
-                        "text": sentence
-                    })
-                else:
-                    all_sentences_processed = False
-                    break
-
-            if all_sentences_processed:
-                raw_segments.extend(sentence_segments)
-                log.info(
-                    f"Successfully split segment {segment.get('id', 'unknown')} into {len(sentence_segments)} sentences")
-            else:
-                raw_segments.append({
-                    "start": segment.get("start", 0),
-                    "end": segment.get("end", 0),
-                    "text": segment_text
-                })
-                log.warning(
-                    f"LLM failed to process segment {segment.get('id', 'unknown')}, keeping it whole: {segment_text[:50]}...")
+        raw_segments.extend(processed_segments)
 
     raw_segments.sort(key=lambda x: x["start"])
 
-    log.info(f"After LLM sentence splitting: {len(raw_segments)} segments")
+    log.info(f"After LLM sentence splitting with validation: {len(raw_segments)} segments")
 
     # STEP 2: Merge short segments based on word count OR duration and time gaps
     merged_segments = []
@@ -302,7 +355,7 @@ def optimize_transcription_segments(transcription_file, job_id, output_file=None
         })
     log.info(f"After merging short segments: {len(merged_segments)} segments")
 
-    # STEP 3: Assign IDs and fix any overlapping segments
+    # STEP 3: Assign IDs (overlap проверка больше не нужна!)
     new_segments = []
     for i, segment in enumerate(merged_segments):
         new_segments.append({
@@ -312,23 +365,20 @@ def optimize_transcription_segments(transcription_file, job_id, output_file=None
             "text": segment["text"]
         })
 
+    overlap_count = 0
     for i in range(len(new_segments) - 1):
         current_seg = new_segments[i]
         next_seg = new_segments[i + 1]
 
         if current_seg["end"] > next_seg["start"]:
+            overlap_count += 1
             log.error(f"UNEXPECTED OVERLAP detected between segments {i} and {i + 1}!")
             log.error(f"Segment {i}: {current_seg['end']:.2f}, Segment {i + 1}: {next_seg['start']:.2f}")
-            log.error(f"This indicates a problem in LLM timestamp detection!")
 
-            overlap_mid = (current_seg["end"] + next_seg["start"]) / 2
-            gap = 0.05
-
-            current_seg["end"] = overlap_mid - gap / 2
-            next_seg["start"] = overlap_mid + gap / 2
-
-            log.warning(f"Fixed overlap between segments {i} and {i + 1}: "
-                           f"set boundary at {overlap_mid:.2f}s with {gap * 1000:.0f}ms gap")
+    if overlap_count == 0:
+        log.info("No overlaps detected - validation system working correctly!")
+    else:
+        log.error(f"Found {overlap_count} overlaps - validation system needs debugging!")
 
     result = {
         "text": data.get("text", ""),

@@ -10,7 +10,7 @@ from modules.translation import translate_transcribed_segments
 from modules.tts import generate_tts_for_segments, reassemble_audio_file
 from modules.video_processor import VideoProcessor
 from modules.video_to_audio_conversion import extract_audio
-from modules.optimized_segmentation_via_LLL import optimize_transcription_segments
+from modules.optimized_segmentation_via_LLM_NEW import optimize_transcription_segments
 from modules.automatic_text_correction import correct_segment_durations
 from utils.logger_config import setup_logger, get_job_logger
 
