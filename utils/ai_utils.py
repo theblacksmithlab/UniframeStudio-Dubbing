@@ -30,3 +30,12 @@ def load_system_role_for_sentence_boundaries():
 
     with open(role_file, "r", encoding="utf-8") as f:
         return f.read().strip()
+
+def load_instructions_for_tts_model():
+    instructions_file = "resources/system_roles/tts_instruction.txt"
+    if not os.path.exists(instructions_file):
+        raise FileNotFoundError(f"Instructions file '{instructions_file}' not found.")
+
+    with open(instructions_file, "r", encoding="utf-8") as f:
+        return f.read().strip()
+

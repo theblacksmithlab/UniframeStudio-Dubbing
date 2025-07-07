@@ -7,6 +7,8 @@ import openai
 import requests
 from pydub import AudioSegment
 import subprocess
+
+from utils.ai_utils import load_instructions_for_tts_model
 from utils.logger_config import setup_logger, get_job_logger
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
@@ -437,7 +439,7 @@ def generate_openai_tts_with_retry(client, text, voice, temp_file, job_id,
     log = get_job_logger(logger, job_id)
 
     if instructions is None:
-        instructions = "Speak vigorously, 20% faster than normal pace."
+        instructions = load_instructions_for_tts_model()
 
     retries = 0
     last_exception = None
