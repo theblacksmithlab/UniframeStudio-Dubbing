@@ -15,13 +15,9 @@ logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def detect_speech_start_with_vad(audio_path, job_id):
-    """
-    Определяет начало речи в аудио файле с помощью Silero VAD
-    """
     log = get_job_logger(logger, job_id)
 
     try:
-        # Загружаем Silero VAD модель с правильным репозиторием
         log.info("Loading Silero VAD model...")
         model, utils = torch.hub.load(
             repo_or_dir='snakers4/silero-vad',
@@ -30,35 +26,32 @@ def detect_speech_start_with_vad(audio_path, job_id):
             force_reload=False
         )
 
-        # Загружаем аудио с правильным sample rate
         log.info(f"Analyzing audio file: {audio_path}")
         wav, original_sr = torchaudio.load(audio_path)
 
-        # Silero VAD требует 16kHz или 8kHz
         target_sr = 16000
         if original_sr != target_sr:
             log.info(f"Resampling from {original_sr}Hz to {target_sr}Hz for VAD")
             resampler = torchaudio.transforms.Resample(original_sr, target_sr)
             wav = resampler(wav)
 
-        # Получаем speech timestamps с настройками чувствительности
         speech_timestamps = utils[0](
             wav,
             model,
             sampling_rate=target_sr,
-            threshold=0.3,  # порог чувствительности (0.1-0.9, по умолчанию 0.5)
-            min_speech_duration_ms=250,  # минимальная длительность речи (мс)
-            min_silence_duration_ms=100,  # минимальная длительность тишины (мс)
-            window_size_samples=512,  # размер окна для анализа
-            speech_pad_ms=100,  # добавить мс ДО и ПОСЛЕ речи
+            threshold=0.3,
+            min_speech_duration_ms=250,
+            min_silence_duration_ms=100,
+            window_size_samples=512,
+            speech_pad_ms=200,
         )
 
         if speech_timestamps:
-            speech_start = speech_timestamps[0]['start'] / target_sr  # используем target_sr
+            speech_start = speech_timestamps[0]['start'] / target_sr
             speech_end = speech_timestamps[-1]['end'] / target_sr
 
-            log.info(f"✅ Speech detected from {speech_start:.2f}s to {speech_end:.2f}s")
-            log.info(f"📈 Total speech segments found: {len(speech_timestamps)}")
+            log.info(f"Speech detected from {speech_start:.2f}s to {speech_end:.2f}s")
+            log.info(f"Total speech segments found: {len(speech_timestamps)}")
 
             return {
                 'speech_start': speech_start,
@@ -67,7 +60,7 @@ def detect_speech_start_with_vad(audio_path, job_id):
                 'all_segments': speech_timestamps
             }
         else:
-            log.warning("❌ No speech detected in audio file")
+            log.warning("No speech detected in audio file")
             return {
                 'speech_start': 0.0,
                 'speech_end': 0.0,
@@ -77,7 +70,6 @@ def detect_speech_start_with_vad(audio_path, job_id):
 
     except Exception as e:
         log.error(f"Error in VAD analysis: {e}")
-        # Fallback - возвращаем начало файла
         return {
             'speech_start': 0.0,
             'speech_end': 0.0,
@@ -87,9 +79,6 @@ def detect_speech_start_with_vad(audio_path, job_id):
 
 
 def trim_audio_to_speech(audio_path, speech_start, job_id, min_trim_threshold=5.0):
-    """
-    Обрезает аудио до начала речи, если тишина больше порога
-    """
     log = get_job_logger(logger, job_id)
 
     if speech_start < min_trim_threshold:
@@ -98,43 +87,36 @@ def trim_audio_to_speech(audio_path, speech_start, job_id, min_trim_threshold=5.
 
     log.info(f"Trimming audio: removing first {speech_start:.2f} seconds")
 
-    # Создаем путь для обрезанного файла
     base_name = os.path.splitext(audio_path)[0]
     trimmed_path = f"{base_name}_speech_trimmed.mp3"
 
-    # Обрезаем аудио с помощью ffmpeg
     cmd = [
-        'ffmpeg', '-y',  # -y для перезаписи
-        '-ss', f'{speech_start:.3f}',  # начать с speech_start
+        'ffmpeg', '-y',
+        '-ss', f'{speech_start:.3f}',
         '-i', audio_path,
-        '-c', 'copy',  # копировать без перекодирования
+        '-c', 'copy',
         trimmed_path
     ]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        log.info(f"✅ Audio trimmed successfully: {trimmed_path}")
-        return trimmed_path, speech_start  # возвращаем путь и offset
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        log.info(f"Audio trimmed successfully: {trimmed_path}")
+        return trimmed_path, speech_start
 
     except subprocess.CalledProcessError as e:
         log.error(f"Error trimming audio: {e}")
         log.error(f"FFmpeg stderr: {e.stderr}")
-        return audio_path, 0.0  # возвращаем оригинал
+        return audio_path, 0.0
 
 
 def adjust_transcription_timestamps(transcription_result, speech_offset):
-    """
-    Корректирует timestamps в результате транскрипции с учетом обрезки
-    """
     if speech_offset <= 0:
         return transcription_result
 
-    # Корректируем timestamps в segments
     for segment in transcription_result.get("segments", []):
         segment["start"] += speech_offset
         segment["end"] += speech_offset
 
-    # Корректируем timestamps в words
     for word in transcription_result.get("words", []):
         word["start"] += speech_offset
         word["end"] += speech_offset
@@ -142,7 +124,6 @@ def adjust_transcription_timestamps(transcription_result, speech_offset):
     return transcription_result
 
 
-# Обновленная функция transcribe с интеграцией VAD
 def transcribe_with_vad(job_id, file_path, source_language=None, openai_api_key=None,
                         transcription_keywords=None, enable_vad=True, min_trim_threshold=5.0):
     log = get_job_logger(logger, job_id)
@@ -151,7 +132,7 @@ def transcribe_with_vad(job_id, file_path, source_language=None, openai_api_key=
     speech_offset = 0.0
 
     if enable_vad:
-        log.info("🔍 Analyzing audio for speech detection...")
+        log.info("Analyzing audio for speech detection with VAD...")
 
         vad_result = detect_speech_start_with_vad(file_path, job_id)
         speech_start = vad_result['speech_start']
@@ -162,33 +143,30 @@ def transcribe_with_vad(job_id, file_path, source_language=None, openai_api_key=
             )
             file_path = trimmed_audio
 
-            log.info(f"📊 VAD Results:")
-            log.info(f"  - Original file: {original_audio_path}")
-            log.info(f"  - Trimmed file: {file_path}")
-            log.info(f"  - Speech offset: {speech_offset:.2f}s")
+            log.info(f"VAD Results: Speech offset: {speech_offset:.2f}s")
         else:
-            log.info(f"💡 No significant silence detected, using original audio")
+            log.info("No significant silence detected, using original audio")
 
-    log.info("🎯 Starting transcription...")
+    log.info("Starting transcription...")
+
     transcription = transcribe(
         job_id, file_path, source_language, openai_api_key, transcription_keywords
     )
 
     if speech_offset > 0:
-        log.info(f"⏰ Adjusting timestamps by +{speech_offset:.2f}s")
+        log.info(f"Adjusting timestamps by +{speech_offset:.2f}s")
         transcription = adjust_transcription_timestamps(transcription, speech_offset)
 
     if file_path != original_audio_path and os.path.exists(file_path):
         try:
             os.remove(file_path)
-            log.info(f"🗑️ Cleaned up temporary file: {file_path}")
-        except:
-            log.warning(f"⚠️ Could not remove temporary file: {file_path}")
+            log.info(f"Cleaned up temporary file: {file_path}")
+        except (OSError, PermissionError) as e:
+            log.warning(f"Could not remove temporary file: {file_path}: {e}")
 
     return transcription
 
 
-# Интеграция в основную функцию transcribe_audio_with_timestamps
 def transcribe_audio_with_timestamps_vad(
         input_audio,
         job_id,
@@ -253,7 +231,6 @@ def transcribe_audio_with_timestamps_vad(
         log.info(f"Total number of segments: {len(transcription.get('segments', []))}")
         log.info(f"Total number of words: {len(transcription.get('words', []))}")
 
-        # Сохраняем VAD info для первого чанка
         if i == 0 and 'vad_info' in transcription:
             full_result['vad_info'] = transcription['vad_info']
 
@@ -285,7 +262,6 @@ def transcribe_audio_with_timestamps_vad(
         if chunk_path != input_audio:
             os.remove(chunk_path)
 
-    # Подсчитываем outro gap
     outro_gap_duration = 0.0
     if full_result["segments"]:
         last_segment_end = full_result["segments"][-1]["end"]
