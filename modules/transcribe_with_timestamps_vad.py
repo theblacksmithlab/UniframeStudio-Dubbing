@@ -39,11 +39,11 @@ def detect_speech_start_with_vad(audio_path, job_id):
             wav,
             model,
             sampling_rate=target_sr,
-            threshold=0.3,
+            threshold=0.25,
             min_speech_duration_ms=250,
             min_silence_duration_ms=100,
             window_size_samples=512,
-            speech_pad_ms=200,
+            speech_pad_ms=500,
         )
 
         if speech_timestamps:
