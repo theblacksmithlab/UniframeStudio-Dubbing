@@ -25,18 +25,22 @@ def correct_text_through_api(
 
     system_role = load_system_role_for_text_correction(mode)
 
-    context_parts = []
+    prompt_parts = []
+
     if previous_text:
-        context_parts.append(f"Previous segment text (for context): {previous_text}")
+        prompt_parts.append(f"Previous segments (for context): {previous_text}")
+
+    prompt_parts.append(f"Current segment to correct: {current_text}")
+
     if next_text:
-        context_parts.append(f"Next segment text (for context): {next_text}")
+        prompt_parts.append(f"Next segments (for context): {next_text}")
 
-    context_prompt = "\n".join(context_parts) + "\n" if context_parts else ""
+    prompt_parts.extend([
+        f"Original duration: {original_duration:.3f} seconds",
+        f"TTS duration: {tts_duration:.3f} seconds"
+    ])
 
-    prompt = (f"{context_prompt}"
-              f"Current segment text to correct: {current_text}\n"
-              f"Original duration: {original_duration:.3f} seconds\n"
-              f"TTS duration: {tts_duration:.3f} seconds\n")
+    prompt = "\n".join(prompt_parts)
 
     log.debug(f"Prompt: {prompt}")
 
