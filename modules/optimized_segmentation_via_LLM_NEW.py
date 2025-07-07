@@ -176,28 +176,24 @@ def validate_sentence_segments(sentence_segments, original_segment, prev_segment
     if not sentence_segments:
         return False
 
-    # 1. Проверка внутренних overlap'ов между предложениями
     for i in range(len(sentence_segments) - 1):
         current_end = sentence_segments[i]["end"]
         next_start = sentence_segments[i + 1]["start"]
 
         if current_end > next_start:
-            return False  # Overlap между предложениями
+            return False
 
-    # 2. Проверка что все предложения в пределах исходного сегмента
     first_start = sentence_segments[0]["start"]
     last_end = sentence_segments[-1]["end"]
 
     if first_start < original_segment["start"] or last_end > original_segment["end"]:
-        return False  # Выход за границы исходного сегмента
+        return False
 
-    # 3. Проверка с предыдущим сегментом
     if prev_segment and first_start < prev_segment["end"]:
-        return False  # Overlap с предыдущим сегментом
+        return False
 
-    # 4. Проверка со следующим сегментом
     if next_segment and last_end > next_segment["start"]:
-        return False  # Overlap со следующим сегментом
+        return False
 
     return True
 
@@ -215,14 +211,12 @@ def process_segment_with_retry(job_id, segment, words_list, openai_api_key, mode
 
     log.info(f"Attempting to split segment {segment.get('id', 'unknown')} into {len(sentences)} sentences")
 
-    # Пытаемся разбить сегмент до max_retries раз
     for attempt in range(max_retries):
         log.info(f"Attempt {attempt + 1}/{max_retries} for segment {segment.get('id', 'unknown')}")
 
         sentence_segments = []
         all_sentences_processed = True
 
-        # Обрабатываем каждое предложение через LLM
         for sentence in sentences:
             timestamps = get_sentence_timestamps_with_llm(job_id, sentence, segment, words_list,
                                                           openai_api_key, model)
@@ -237,12 +231,10 @@ def process_segment_with_retry(job_id, segment, words_list, openai_api_key, mode
                 all_sentences_processed = False
                 break
 
-        # Если LLM не справился с каким-то предложением
         if not all_sentences_processed:
             log.warning(f"LLM failed to process some sentences in attempt {attempt + 1}")
             continue
 
-        # Валидируем полученные временные метки
         if validate_sentence_segments(sentence_segments, segment, prev_segment, next_segment):
             log.info(
                 f"Successfully split segment {segment.get('id', 'unknown')} into {len(sentence_segments)} sentences on attempt {attempt + 1}")
@@ -250,7 +242,6 @@ def process_segment_with_retry(job_id, segment, words_list, openai_api_key, mode
         else:
             log.warning(f"Validation failed for segment {segment.get('id', 'unknown')} on attempt {attempt + 1}")
 
-    # Если все попытки провалились - возвращаем исходный сегмент
     log.warning(f"All {max_retries} attempts failed for segment {segment.get('id', 'unknown')}, keeping original")
     return [segment]
 
