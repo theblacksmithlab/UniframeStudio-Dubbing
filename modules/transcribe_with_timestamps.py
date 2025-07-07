@@ -9,7 +9,6 @@ from utils.logger_config import setup_logger, get_job_logger
 import whisper
 from typing import Optional, Dict, Any
 
-
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 _whisper_model = None
@@ -125,7 +124,6 @@ def transcribe_audio_with_timestamps(
 
     temp_audio_chunks_dir = f"jobs/{job_id}/output/temp_audio_chunks"
     os.makedirs(temp_audio_chunks_dir, exist_ok=True)
-    os.makedirs(temp_audio_chunks_dir, exist_ok=True)
 
     chunk_paths = split_audio(job_id, input_audio, temp_audio_chunks_dir)
 
@@ -210,7 +208,8 @@ def transcribe_audio_with_timestamps(
     return output_file
 
 
-def transcribe(job_id, file_path, source_language=None, openai_api_key=None, transcription_keywords: Optional[str] = None):
+def transcribe(job_id, file_path, source_language=None, openai_api_key=None,
+               transcription_keywords: Optional[str] = None):
     log = get_job_logger(logger, job_id)
 
     if not openai_api_key:

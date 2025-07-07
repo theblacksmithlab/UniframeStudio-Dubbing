@@ -4,6 +4,7 @@ import sys
 from modules.adjust_timing import adjust_segments_timing
 from modules.cleaning_up_corrected_transcription import cleanup_transcript_segments
 from modules.transcribe_with_timestamps import transcribe_audio_with_timestamps
+from modules.transcribe_with_timestamps_vs import transcribe_audio_with_timestamps_vad
 from modules.transcription_correction import correct_transcript_segments
 from modules.translation import translate_transcribed_segments
 from modules.tts import generate_tts_for_segments, reassemble_audio_file
@@ -273,7 +274,7 @@ def main():
         if args.source_language:
             job_logger.info(f"Using source language: {args.source_language}")
         try:
-            transcribe_audio_with_timestamps(
+            transcribe_audio_with_timestamps_vad(
                 args.input,
                 args.job_id,
                 source_language=args.source_language,
