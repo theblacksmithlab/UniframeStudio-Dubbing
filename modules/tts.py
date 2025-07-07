@@ -445,7 +445,7 @@ def generate_openai_tts_with_retry(client, text, voice, temp_file, job_id,
     while retries < max_retries:
         try:
             log.info(f"Attempting OpenAI TTS generation (attempt {retries + 1}/{max_retries})")
-
+            log.info("NEW METHOD!")
             with client.audio.speech.with_streaming_response.create(
                     model="gpt-4o-mini-tts",
                     voice=voice,
