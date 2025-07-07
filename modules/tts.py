@@ -432,8 +432,12 @@ def make_api_request_with_retry(url, data, headers, max_retries=10, retry_delay=
         raise Exception(f"Failed after {max_retries} attempts. Last error: {last_exception}")
 
 
-def generate_openai_tts_with_retry(client, text, voice, temp_file, job_id, max_retries=10, retry_delay=2):
+def generate_openai_tts_with_retry(client, text, voice, temp_file, job_id,
+                                   instructions=None, max_retries=10, retry_delay=2):
     log = get_job_logger(logger, job_id)
+
+    if instructions is None:
+        instructions = "Speak vigorously, 20% faster than normal pace."
 
     retries = 0
     last_exception = None
@@ -442,29 +446,25 @@ def generate_openai_tts_with_retry(client, text, voice, temp_file, job_id, max_r
         try:
             log.info(f"Attempting OpenAI TTS generation (attempt {retries + 1}/{max_retries})")
 
-            response = client.audio.speech.create(
-                model="tts-1",
-                voice=voice,
-                input=text,
-                speed=1.2
-            )
+            with client.audio.speech.with_streaming_response.create(
+                    model="gpt-4o-mini-tts",
+                    voice=voice,
+                    input=text,
+                    instructions=instructions,
+                    response_format="mp3"
+            ) as response:
+                response.stream_to_file(temp_file)
 
-            if hasattr(response, 'content') and response.content:
-                with open(temp_file, "wb") as f:
-                    f.write(response.content)
-
-                if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
-                    log.info("OpenAI TTS generation successful")
-                    return True
-                else:
-                    raise Exception("Generated audio file is empty or was not created")
+            if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
+                log.info("OpenAI TTS generation successful")
+                return True
             else:
-                raise Exception("OpenAI API returned empty response")
-
+                raise Exception("Generated audio file is empty or was not created")
 
         except Exception as e:
             last_exception = e
             log.warning(f"OpenAI TTS failed (attempt {retries + 1}/{max_retries}): {e}")
+
             if os.path.exists(temp_file):
                 try:
                     os.remove(temp_file)
@@ -478,3 +478,51 @@ def generate_openai_tts_with_retry(client, text, voice, temp_file, job_id, max_r
             time.sleep(sleep_time)
 
     raise Exception(f"OpenAI TTS failed after {max_retries} attempts. Last error: {last_exception}")
+
+
+# def generate_openai_tts_with_retry(client, text, voice, temp_file, job_id, max_retries=10, retry_delay=2):
+#     log = get_job_logger(logger, job_id)
+#
+#     retries = 0
+#     last_exception = None
+#
+#     while retries < max_retries:
+#         try:
+#             log.info(f"Attempting OpenAI TTS generation (attempt {retries + 1}/{max_retries})")
+#
+#             response = client.audio.speech.create(
+#                 model="tts-1",
+#                 voice=voice,
+#                 input=text,
+#                 speed=1.2
+#             )
+#
+#             if hasattr(response, 'content') and response.content:
+#                 with open(temp_file, "wb") as f:
+#                     f.write(response.content)
+#
+#                 if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
+#                     log.info("OpenAI TTS generation successful")
+#                     return True
+#                 else:
+#                     raise Exception("Generated audio file is empty or was not created")
+#             else:
+#                 raise Exception("OpenAI API returned empty response")
+#
+#
+#         except Exception as e:
+#             last_exception = e
+#             log.warning(f"OpenAI TTS failed (attempt {retries + 1}/{max_retries}): {e}")
+#             if os.path.exists(temp_file):
+#                 try:
+#                     os.remove(temp_file)
+#                 except (OSError, PermissionError) as cleanup_error:
+#                     log.warning(f"Failed to remove damaged file {temp_file}: {cleanup_error}")
+#
+#         retries += 1
+#         if retries < max_retries:
+#             sleep_time = retry_delay * retries
+#             log.info(f"Retrying OpenAI TTS in {sleep_time} seconds...")
+#             time.sleep(sleep_time)
+#
+#     raise Exception(f"OpenAI TTS failed after {max_retries} attempts. Last error: {last_exception}")

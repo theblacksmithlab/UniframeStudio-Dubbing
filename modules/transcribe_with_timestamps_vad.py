@@ -1,4 +1,7 @@
 import shutil
+from typing import Optional
+
+import openai
 import torch
 import torchaudio
 import subprocess
@@ -7,7 +10,6 @@ import json
 
 from pydub import AudioSegment
 
-from modules.transcribe_with_timestamps import transcribe
 from utils.audio_utils import split_audio
 from utils.logger_config import get_job_logger, setup_logger
 
@@ -278,3 +280,79 @@ def transcribe_audio_with_timestamps_vad(
         shutil.rmtree(temp_audio_chunks_dir)
 
     return output_file
+
+
+def transcribe(job_id, file_path, source_language=None, openai_api_key=None,
+               transcription_keywords: Optional[str] = None):
+    log = get_job_logger(logger, job_id)
+
+    if not openai_api_key:
+        raise ValueError("OpenAI API key is required for transcription step but not provided")
+
+    if source_language:
+        language = source_language
+    else:
+        language = None
+
+    base_prompt = "Add proper punctuation. Ignore music in the beginning"
+    if transcription_keywords:
+        prompt = f"Keywords for transcription: {transcription_keywords}. {base_prompt}"
+        log.info(f"Using keywords: {transcription_keywords}")
+    else:
+        prompt = base_prompt
+
+    try:
+        client = openai.OpenAI(api_key=openai_api_key)
+
+        with open(file_path, "rb") as audio_file:
+            api_params = {
+                "model": "whisper-1",
+                "file": audio_file,
+                "response_format": "verbose_json",
+                "timestamp_granularities": ["segment", "word"],
+                "temperature": 0.0,
+                "prompt": prompt
+            }
+
+            if language:
+                api_params["language"] = language
+
+            response = client.audio.transcriptions.create(**api_params)
+
+        if hasattr(response, "model_dump"):
+            result = response.model_dump()
+        elif hasattr(response, "to_dict"):
+            result = response.to_dict()
+        else:
+            result = {
+                "text": getattr(response, "text", ""),
+                "segments": [],
+                "words": []
+            }
+
+            segments = getattr(response, "segments", [])
+            for segment in segments:
+                seg_dict = {
+                    "id": getattr(segment, "id", 0),
+                    "start": getattr(segment, "start", 0),
+                    "end": getattr(segment, "end", 0),
+                    "text": getattr(segment, "text", "")
+                }
+                result["segments"].append(seg_dict)
+
+            words = getattr(response, "words", [])
+            for word in words:
+                word_dict = {
+                    "word": getattr(word, "word", ""),
+                    "start": getattr(word, "start", 0),
+                    "end": getattr(word, "end", 0)
+                }
+                result["words"].append(word_dict)
+
+        if not result.get("text") and not result.get("segments") and not result.get("words"):
+            raise ValueError(f"Empty transcription result for {file_path}")
+
+        return result
+    except Exception as e:
+        log.error(f"Error transcribing {file_path}: {str(e)}")
+        raise ValueError(f"Failed to transcribe audio: {str(e)}")

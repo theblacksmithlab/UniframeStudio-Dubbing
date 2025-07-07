@@ -25,6 +25,7 @@ class ProcessVideoRequest(BaseModel):
     tts_voice: str
     source_language: Optional[str] = None
     transcription_keywords: Optional[str] = None
+    enable_vad: bool = True
 
 
 class JobStatus(BaseModel):

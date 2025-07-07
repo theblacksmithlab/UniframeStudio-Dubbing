@@ -117,7 +117,7 @@ def mix_audio_tracks(job_id, tts_audio_path, background_audio_path, output_path,
 
 
 def process_job(job_id, source_language=None, target_language=None, tts_provider=None, tts_voice=None,
-                elevenlabs_api_key=None, openai_api_key=None, transcription_keywords=None):
+                elevenlabs_api_key=None, openai_api_key=None, transcription_keywords=None, enable_vad=True):
     job_logger = get_job_logger(logger, job_id)
 
     job_dir = f"jobs/{job_id}"
@@ -204,6 +204,9 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     if transcription_keywords:
         transcribe_cmd.extend(["--transcription_keywords", transcription_keywords])
+
+    if not enable_vad:
+        transcribe_cmd.append("--no-vad")
 
     if not run_command(transcribe_cmd, job_id, description=step_description):
         return {

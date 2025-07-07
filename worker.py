@@ -208,6 +208,7 @@ def main():
             elevenlabs_api_key=elevenlabs_api_key,
             openai_api_key=openai_api_key,
             transcription_keywords=params.get("transcription_keywords"),
+            enable_vad=params.get("enable_vad", True),
         )
 
         if result["status"] == "success":
