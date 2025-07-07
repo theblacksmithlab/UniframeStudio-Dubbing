@@ -51,7 +51,7 @@ def filter_words_by_timeframe(words_array, segment_start, segment_end):
     return filtered_words
 
 
-def call_llm_for_sentence_boundaries(job_id, sentence, words_array, openai_api_key, model="gpt-4o"):
+def call_llm_for_sentence_boundaries(job_id, sentence, words_array, openai_api_key, model="gpt-4.1-2025-04-14"):
     log = get_job_logger(logger, job_id)
 
     try:
@@ -114,7 +114,7 @@ def call_llm_for_sentence_boundaries(job_id, sentence, words_array, openai_api_k
         return None
 
 
-def get_sentence_timestamps_with_llm(job_id, sentence, segment, words_list, openai_api_key, model="gpt-4o"):
+def get_sentence_timestamps_with_llm(job_id, sentence, segment, words_list, openai_api_key, model="gpt-4.1-2025-04-14"):
     log = get_job_logger(logger, job_id)
 
     sentence = sentence.strip()
@@ -173,7 +173,7 @@ def get_sentence_timestamps_with_llm(job_id, sentence, segment, words_list, open
 
 
 def optimize_transcription_segments(transcription_file, job_id, output_file=None,
-                                    openai_api_key=None, model="gpt-4o"):
+                                    openai_api_key=None, model="gpt-4.1-2025-04-14"):
     log = get_job_logger(logger, job_id)
 
     if not openai_api_key:

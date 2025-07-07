@@ -519,6 +519,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     job_logger.info(f"Clean audio: {final_audio_path}")
     job_logger.info(f"Clean stereo audio: {final_stereo_path}")
 
+
     # [Step 11]
     current_step = 14
     update_job_status(job_id=job_id, step=current_step)
@@ -562,6 +563,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     else:
         job_logger.warning("Background audio creation failed, skipping mixed audio versions")
 
+
     # [Step 13]
     current_step = 16
     step_description = STEP_DESCRIPTIONS[current_step].rstrip('.')
@@ -597,6 +599,7 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
 
     job_logger.info(f"Video processing completed!")
     job_logger.info(f"TTS-based videos created successfully")
+
 
     # [Step 14]
     current_step = 17
@@ -669,9 +672,6 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
         "final_video_tts_based": tts_based_video_path
 
         }
-        # "steps_completed": ["extract", "transcribe", "correct", "cleanup", "optimize", "adjust", "translate",
-        #                     "tts", "auto-correct", "final_audio_files_creation", "process_video",
-        #                     "combine_video_audio"]
     }
 
     # [Cleanup]
@@ -745,47 +745,6 @@ def process_job(job_id, source_language=None, target_language=None, tts_provider
     job_logger.info(f"Job ID: {job_id}")
     job_logger.info(f"Original video: {video_path}")
     job_logger.info(f"Final video: {final_video_path}")
-    # job_logger.info(f"Total steps completed: {len(result['steps_completed'])}")
     job_logger.info(f"{'=' * 50}")
 
     return result
-
-
-# def main():
-#     parser = argparse.ArgumentParser(description="Complete video processing pipeline")
-#     parser.add_argument("--job_id", required=True, help="Unique job identifier")
-#     parser.add_argument("--source_language", help="Source language of the video (optional)")
-#     parser.add_argument("--target_language", required=True, help="Target language for translation")
-#     parser.add_argument("--tts_provider", choices=["openai", "elevenlabs"],
-#                         required=True, help="TTS service provider")
-#     parser.add_argument("--tts_voice", required=True, help="Voice identifier for TTS")
-#     parser.add_argument("--elevenlabs_api_key", help="ElevenLabs API key (optional)")
-#     parser.add_argument("--openai_api_key", required=True, help="OpenAI API key")
-#
-#     args = parser.parse_args()
-#
-#     if args.tts_provider == "elevenlabs" and not args.elevenlabs_api_key:
-#         logger.error("Error: ElevenLabs API key is required for ElevenLabs TTS provider.")
-#         return 1
-#
-#     os.makedirs("jobs", exist_ok=True)
-#
-#     result = process_job(
-#         args.job_id,
-#         source_language=args.source_language,
-#         target_language=args.target_language,
-#         tts_provider=args.tts_provider,
-#         tts_voice=args.tts_voice,
-#         elevenlabs_api_key=args.elevenlabs_api_key,
-#         openai_api_key=args.openai_api_key,
-#     )
-#
-#     if result["status"] == "error":
-#         logger.error(f"Error processing job {args.job_id}: {result['message']}")
-#         return 1
-#
-#     return 0
-#
-# if __name__ == "__main__":
-#     exit_code = main()
-#     sys.exit(exit_code)

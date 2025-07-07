@@ -8,7 +8,7 @@ logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
 def translate_transcribed_segments(input_file, job_id, output_file=None, target_language=None,
-                                   model="gpt-4o", openai_api_key=None):
+                                   model="gpt-4.1-2025-04-14", openai_api_key=None):
     log = get_job_logger(logger, job_id)
 
     if not openai_api_key:

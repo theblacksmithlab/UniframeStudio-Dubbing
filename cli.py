@@ -142,7 +142,7 @@ def main():
         "--output", "-o", help="Path to save translated transcription (optional)"
     )
     translate_parser.add_argument(
-        "--model", "-m", default="gpt-4o", help="Translation model (default: gpt-4o)"
+        "--model", "-m", default="gpt-4.1-2025-04-14", help="Translation model (default: gpt-4.1-2025-04-14)"
     )
     translate_parser.add_argument(
         "--target_language",

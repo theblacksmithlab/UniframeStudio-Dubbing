@@ -75,35 +75,6 @@ def extract_audio(
                       original_wav_audio_path
                   ]
 
-    # command_transcription = [
-    #     "ffmpeg", "-y",
-    #     "-i", input_video_path,
-    #     "-vn",
-    #     "-codec:a", "libmp3lame",
-    #     "-qscale:a", "2",
-    #     "-ac", "1",
-    #     "-ar", "24000",
-    #     extracted_audio_path
-    # ]
-    #
-    # command_hq_mp3 = [
-    #     "ffmpeg", "-y",
-    #     "-i", input_video_path,
-    #     "-vn",
-    #     "-acodec", "mp3",
-    #     "-b:a", "320k",
-    #     "-ar", "44100",
-    #     original_hq_audio_path
-    # ]
-    #
-    # command_wav = [
-    #     "ffmpeg", "-y",
-    #     "-i", input_video_path,
-    #     "-vn",
-    #     "-acodec", "pcm_s16le",
-    #     "-ar", "44100",
-    #     original_wav_audio_path
-    # ]
 
     def run_extraction(command, output_path, description):
         try:

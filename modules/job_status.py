@@ -19,15 +19,15 @@ STEP_DESCRIPTIONS = {
     7: "Optimizing transcription...",
     8: "Adjusting transcription segments timing...",
     9: "Translating transcription segments...",
-    10: "Speakers' gender analysis & voice mapping",
+    10: "Speaker gender analysis & voice mapping",
     11: "Transcription review required...",
     12: "Generating TTS segments...",
     13: "Auto-correcting segment durations...",
     14: "Processing background audio...",
-    15: "Mixing down audio files...",
-    16: "Processing video with new segments' data...",
+    15: "Mixing down audio...",
+    16: "Processing video with new timestamps...",
     17: "Creating final video with stereo audio...",
-    18: "Uploading results to S3 storage...",
+    18: "Uploading results to cloud storage...",
     19: "Finalizing dubbing job..."
 }
 

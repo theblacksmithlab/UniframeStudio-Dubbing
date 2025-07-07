@@ -230,6 +230,7 @@ def main():
                 job_logger.info("Cleaning up temporary files...")
 
                 cleanup_job_files(job_id)
+
             except Exception as e:
                 if 'job_logger' in locals():
                     job_logger.error(f"Error uploading results: {e}")

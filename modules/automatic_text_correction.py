@@ -48,7 +48,7 @@ def correct_text_through_api(
         client = openai.OpenAI(api_key=openai_api_key)
 
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1-2025-04-14",
             messages=[
                 {"role": "system", "content": system_role},
                 {"role": "user", "content": prompt}
