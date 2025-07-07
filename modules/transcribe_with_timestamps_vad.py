@@ -41,8 +41,17 @@ def detect_speech_start_with_vad(audio_path, job_id):
             resampler = torchaudio.transforms.Resample(original_sr, target_sr)
             wav = resampler(wav)
 
-        # Получаем speech timestamps
-        speech_timestamps = utils[0](wav, model, sampling_rate=target_sr)
+        # Получаем speech timestamps с настройками чувствительности
+        speech_timestamps = utils[0](
+            wav,
+            model,
+            sampling_rate=target_sr,
+            threshold=0.3,  # порог чувствительности (0.1-0.9, по умолчанию 0.5)
+            min_speech_duration_ms=250,  # минимальная длительность речи (мс)
+            min_silence_duration_ms=100,  # минимальная длительность тишины (мс)
+            window_size_samples=512,  # размер окна для анализа
+            speech_pad_ms=50,  # добавить мс ДО и ПОСЛЕ речи
+        )
 
         if speech_timestamps:
             speech_start = speech_timestamps[0]['start'] / target_sr  # используем target_sr
