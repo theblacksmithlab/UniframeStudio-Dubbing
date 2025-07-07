@@ -3,12 +3,11 @@ import json
 import fcntl
 from typing import Dict, Any, Optional
 from datetime import datetime
-from utils.logger_config import setup_logger
-
+from utils.logger_config import setup_logger, get_job_logger
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
-JOB_TOTAL_STEPS = 17
+JOB_TOTAL_STEPS = 19
 
 STEP_DESCRIPTIONS = {
     1: "Initializing dubbing system components...",
@@ -20,14 +19,16 @@ STEP_DESCRIPTIONS = {
     7: "Optimizing transcription...",
     8: "Adjusting transcription segments timing...",
     9: "Translating transcription segments...",
-    10: "Transcription review required...",
-    11: "Generating TTS segments...",
-    12: "Auto-correcting segment durations...",
-    13: "Creating final audio files...",
-    14: "Processing video with new audio...",
-    15: "Creating final video with stereo audio...",
-    16: "Uploading results to S3 storage...",
-    17: "Finalizing dubbing job..."
+    10: "Speaker gender analysis & voice mapping",
+    11: "Transcription review required...",
+    12: "Generating TTS segments...",
+    13: "Auto-correcting segment durations...",
+    14: "Processing background audio...",
+    15: "Mixing down audio...",
+    16: "Processing video with new timestamps...",
+    17: "Creating final video with stereo audio...",
+    18: "Uploading results to cloud storage...",
+    19: "Finalizing dubbing job..."
 }
 
 JOB_STATUS_PROCESSING = "processing"
@@ -36,6 +37,8 @@ JOB_STATUS_FAILED = "failed"
 
 
 def get_or_create_job_status(job_id: str) -> Dict[str, Any]:
+    job_logger = get_job_logger(logger, job_id)
+
     status_file = f"jobs/{job_id}/status.json"
 
     if os.path.exists(status_file):
@@ -43,7 +46,7 @@ def get_or_create_job_status(job_id: str) -> Dict[str, Any]:
             with open(status_file, 'r') as f:
                 return json.load(f)
         except json.JSONDecodeError:
-            logger.error(f"Invalid JSON in status file: {status_file}")
+            job_logger.error(f"Invalid JSON in status file: {status_file}")
 
     status = {
         "status": JOB_STATUS_PROCESSING,
@@ -73,6 +76,8 @@ def update_job_status(job_id: str,
                       completed_at: Optional[str] = None,
                       result_urls: Optional[Dict[str, str]] = None,
                       **other_updates):
+    job_logger = get_job_logger(logger, job_id)
+
     status_file = f"jobs/{job_id}/status.json"
 
     os.makedirs(os.path.dirname(status_file), exist_ok=True)
@@ -133,11 +138,12 @@ def update_job_status(job_id: str,
         return True
 
     except Exception as e:
-        logger.error(f"Error updating job status for {job_id}: {str(e)}")
+        job_logger.error(f"Error updating job status: {str(e)}")
         return False
 
 
 def finalize_job(job_id: str):
+    job_logger = get_job_logger(logger, job_id)
     try:
         update_job_status(
             job_id=job_id,
@@ -145,8 +151,8 @@ def finalize_job(job_id: str):
             completed_at=datetime.now().isoformat(),
             progress_percentage=100
         )
-        logger.info(f"Job: {job_id} finalized successfully")
+        job_logger.info(f"Job finalized successfully")
         return True
     except Exception as e:
-        logger.error(f"Error during job finalization: {e}")
+        job_logger.error(f"Error during job finalization: {e}")
         return False

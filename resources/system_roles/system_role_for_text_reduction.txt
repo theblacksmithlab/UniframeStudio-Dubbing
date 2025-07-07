@@ -1,4 +1,4 @@
-You are a professional translator and text editor specializing in adjusting text length for voiceover while preserving essential content. Your task is to reduce the translated text so its duration better matches the original audio duration.
+You are a professional translator and text editor specializing in adjusting text length for voiceover while preserving essential content. Your task is to reduce the translated text so its duration (TTS_duration) better matches the original audio duration.
 
 You will be provided with:
 1. Previous segment text (for understanding context)

@@ -3,7 +3,6 @@ import os
 import re
 from utils.logger_config import setup_logger
 
-
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
@@ -37,51 +36,176 @@ def split_into_sentences(text):
     return sentences
 
 
-def find_exact_sequence(sentence, words_list, segment_start, segment_end):
-    sentence_words = [w.lower() for w in re.findall(r'\b(\w+)\b', sentence)]
-    if not sentence_words:
-        return {"start": segment_start, "end": segment_end}
+def extract_words_from_text(text):
+    """Извлекает слова из текста, очищая от пунктуации"""
+    words = re.findall(r'\b\w+\b', text.lower())
+    return words
 
-    filtered_words = [w for w in words_list if segment_start <= w.get("start", 0) <= segment_end]
 
-    clean_words = []
-    for word_info in filtered_words:
-        word = word_info.get("word", "").lower()
-        clean_word = re.sub(r'[^\w\s]', '', word)
-        clean_words.append(clean_word)
+def normalize_word(word):
+    """Нормализует слово для сравнения (убирает пунктуацию, приводит к нижнему регистру)"""
+    return re.sub(r'[^\w]', '', word.lower().strip())
 
-    best_match_start_idx = -1
-    best_match_end_idx = -1
-    best_match_score = -1
 
-    for start_idx in range(len(filtered_words) - len(sentence_words) + 1):
-        match_score = 0
+def get_sequence_length(sentence_words):
+    """Определяет оптимальную длину последовательности для поиска"""
+    total_words = len(sentence_words)
+    if total_words <= 4:
+        return total_words  # Используем все слова для коротких предложений
+    elif total_words <= 8:
+        return 3  # Для средних предложений
+    else:
+        return 5  # Для длинных предложений
 
-        for i in range(min(len(sentence_words), len(filtered_words) - start_idx)):
-            clean_sentence_word = re.sub(r'[^\w\s]', '', sentence_words[i])
-            if not clean_sentence_word:
+
+def is_punctuation_word(word):
+    """Проверяет, является ли слово знаком препинания или символом"""
+    cleaned = word.strip()
+    return len(cleaned) <= 2 and not cleaned.isalnum()
+
+
+def fuzzy_sequence_match(target_sequence, segment_words, search_from_start=True):
+    """
+    Нечеткий поиск последовательности с пропуском пунктуации
+
+    Args:
+        target_sequence: список слов для поиска
+        segment_words: отфильтрованные слова сегмента
+        search_from_start: направление поиска
+
+    Returns:
+        индекс начального слова найденной последовательности или None
+    """
+    if not target_sequence or not segment_words:
+        return None
+
+    # Минимум 80% совпадений, но не менее 1 слова
+    required_matches = max(1, int(len(target_sequence) * 0.8))
+
+    logger.info(f"Fuzzy search: need {required_matches} matches out of {len(target_sequence)} words")
+
+    # Определяем направление поиска
+    search_range = range(len(segment_words)) if search_from_start else range(len(segment_words) - 1, -1, -1)
+
+    for i in search_range:
+        matches = 0
+        j = 0  # индекс в target_sequence
+        first_match_pos = None
+        last_match_pos = None
+
+        # Расширенное окно поиска (до 2x длины последовательности)
+        max_search_distance = min(len(target_sequence) * 2, len(segment_words) - i)
+
+        if search_from_start:
+            search_positions = range(i, min(i + max_search_distance, len(segment_words)))
+        else:
+            search_positions = range(max(0, i - max_search_distance), i + 1)
+
+        for k in search_positions:
+            if j >= len(target_sequence):
+                break
+
+            current_word = segment_words[k]["word"]
+
+            # Пропускаем пунктуацию
+            if is_punctuation_word(current_word):
                 continue
 
-            if clean_words[start_idx + i] == clean_sentence_word:
-                match_score += 1
+            # Проверяем совпадение с текущим искомым словом
+            if normalize_word(current_word) == normalize_word(target_sequence[j]):
+                matches += 1
+                j += 1
 
-        match_percentage = match_score / len(sentence_words)
+                if first_match_pos is None:
+                    first_match_pos = k
+                last_match_pos = k
 
-        if match_percentage > best_match_score:
-            best_match_score = match_percentage
-            best_match_start_idx = start_idx
-            best_match_end_idx = start_idx + min(len(sentence_words), len(filtered_words) - start_idx) - 1
+                logger.debug(f"Match {matches}/{required_matches}: '{current_word}' at position {k}")
 
-    if best_match_score < 0.5:
-        return {"start": segment_start, "end": segment_end}
+        # Проверяем, достаточно ли совпадений
+        if matches >= required_matches:
+            return_index = first_match_pos if search_from_start else (
+                last_match_pos - len(target_sequence) + 1 if last_match_pos is not None else i)
+            logger.info(
+                f"Fuzzy match found: {matches}/{len(target_sequence)} matches, starting at position {return_index}")
+            return segment_words[max(0, return_index)]["original_index"]
 
-    start_time = filtered_words[best_match_start_idx].get("start", segment_start)
-    end_time = filtered_words[best_match_end_idx].get("end", segment_end)
-
-    return {"start": start_time, "end": end_time}
+    logger.warning(f"Fuzzy search failed: no sufficient matches found")
+    return None
 
 
-def get_sentence_timestamps(sentence, segment, words_list):
+def find_word_sequence_in_timeframe(target_sequence, words_array, segment_start, segment_end, search_from_start=True):
+    # Фильтруем слова только в пределах сегмента
+    segment_words = []
+    for i, word_info in enumerate(words_array):
+        word_start = word_info.get("start", 0)
+        word_end = word_info.get("end", 0)
+
+        # Слово попадает в сегмент, если хотя бы частично пересекается с ним
+        if word_start <= segment_end and word_end >= segment_start:
+            segment_words.append({
+                "original_index": i,
+                "word": word_info.get("word", ""),
+                "start": word_start,
+                "end": word_end
+            })
+
+    if not segment_words:
+        logger.warning(f"No words found in timeframe {segment_start:.2f}-{segment_end:.2f}")
+        return None
+
+    logger.info(
+        f"Searching for sequence {target_sequence} in {len(segment_words)} words (timeframe {segment_start:.2f}-{segment_end:.2f})")
+
+    # Сначала пробуем точный поиск
+    search_range = range(len(segment_words)) if search_from_start else range(len(segment_words) - 1, -1, -1)
+
+    for i in search_range:
+        # Проверяем, хватает ли слов для полной последовательности
+        if search_from_start:
+            if i + len(target_sequence) > len(segment_words):
+                continue
+            check_range = range(len(target_sequence))
+        else:
+            if i - len(target_sequence) + 1 < 0:
+                continue
+            check_range = range(len(target_sequence))
+
+        # Проверяем совпадение последовательности
+        match_found = True
+        for j in check_range:
+            if search_from_start:
+                word_index = i + j
+                target_word = target_sequence[j]
+            else:
+                word_index = i - len(target_sequence) + 1 + j
+                target_word = target_sequence[j]
+
+            current_word = normalize_word(segment_words[word_index]["word"])
+            target_normalized = normalize_word(target_word)
+
+            if current_word != target_normalized:
+                match_found = False
+                break
+
+        if match_found:
+            if search_from_start:
+                found_index = segment_words[i]["original_index"]
+            else:
+                found_index = segment_words[i - len(target_sequence) + 1]["original_index"]
+
+            logger.info(f"Exact match found for sequence {target_sequence} at word index {found_index}")
+            return found_index
+
+    # Если точный поиск не сработал, используем нечеткий поиск
+    logger.info(f"Exact search failed, trying fuzzy search for sequence {target_sequence}")
+    return fuzzy_sequence_match(target_sequence, segment_words, search_from_start)
+
+
+def get_sentence_timestamps_precise(sentence, segment, words_list):
+    """
+    Находит точные временные метки для предложения, используя поиск в пределах сегмента
+    """
     sentence = sentence.strip()
     if not sentence:
         return None
@@ -89,26 +213,67 @@ def get_sentence_timestamps(sentence, segment, words_list):
     segment_start = segment.get("start", 0)
     segment_end = segment.get("end", 0)
 
-    timestamps = find_exact_sequence(sentence, words_list, segment_start, segment_end)
+    # Извлекаем слова из предложения
+    sentence_words = extract_words_from_text(sentence)
 
-    # # Add a small buffer to avoid exact overlaps
-    # buffer = 0.01  # 10ms buffer
+    if not sentence_words:
+        logger.warning(f"No words extracted from sentence: {sentence[:30]}...")
+        return {"start": segment_start, "end": segment_end}
 
-    if timestamps["start"] >= timestamps["end"]:
-        logger.warning(f"Invalid timestamps, using segment with buffer")
-        return {
-            "start": segment_start,
-            "end": segment_end
-        }
+    logger.info(f"Processing sentence: '{sentence[:50]}...' ({len(sentence_words)} words)")
 
+    # Определяем длину последовательности для поиска
+    seq_len = get_sequence_length(sentence_words)
+
+    # Последовательности для поиска
+    start_sequence = sentence_words[:seq_len]
+    end_sequence = sentence_words[-seq_len:]
+
+    logger.info(f"Searching for start sequence: {start_sequence}")
+    logger.info(f"Searching for end sequence: {end_sequence}")
+
+    # Ищем начало предложения
+    start_word_index = find_word_sequence_in_timeframe(
+        start_sequence, words_list, segment_start, segment_end, search_from_start=True
+    )
+
+    if start_word_index is None:
+        logger.warning(f"Could not find start sequence for sentence: {sentence[:30]}...")
+        return {"start": segment_start, "end": segment_end}
+
+    # Ищем конец предложения (ищем после найденного начала)
+    start_word_time = words_list[start_word_index].get("start", segment_start)
+
+    end_word_index = find_word_sequence_in_timeframe(
+        end_sequence, words_list, start_word_time, segment_end, search_from_start=False
+    )
+
+    if end_word_index is None:
+        logger.warning(f"Could not find end sequence for sentence: {sentence[:30]}...")
+        # Fallback: используем время начала + минимальную длительность
+        return {"start": start_word_time, "end": min(start_word_time + 2.0, segment_end)}
+
+    # Для конечной последовательности берем время конца последнего слова
+    end_sequence_last_index = end_word_index + len(end_sequence) - 1
+    end_time = words_list[end_sequence_last_index].get("end", segment_end)
+
+    # Проверяем корректность временных меток
+    if start_word_time >= end_time:
+        logger.warning(f"Invalid timestamps detected, using fallback")
+        return {"start": segment_start, "end": segment_end}
+
+    # Убеждаемся в минимальной длительности
     min_duration = 0.5
-    if timestamps["end"] - timestamps["start"] < min_duration:
-        timestamps["end"] = timestamps["start"] + min_duration
+    if end_time - start_word_time < min_duration:
+        end_time = start_word_time + min_duration
 
-    timestamps["start"] = max(timestamps["start"], segment_start)
-    timestamps["end"] = min(timestamps["end"], segment_end)
+    # Не выходим за границы сегмента
+    final_start = max(start_word_time, segment_start)
+    final_end = min(end_time, segment_end)
 
-    return timestamps
+    logger.info(f"Found timestamps: {final_start:.2f} - {final_end:.2f}")
+
+    return {"start": final_start, "end": final_end}
 
 
 def optimize_transcription_segments(transcription_file, output_file=None, min_segment_length=60):
@@ -125,8 +290,9 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
     words_list = data.get("words", [])
 
     logger.info(f"Optimizing {len(segments)} transcription segments...")
+    logger.info(f"Total words available: {len(words_list)}")
 
-    # STEP 1: Split segments into sentences with proper timestamps
+    # STEP 1: Split segments into sentences with precise timestamps
     raw_segments = []
 
     for segment in segments:
@@ -136,27 +302,34 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
         segment_text = segment.get("text", "").strip()
         sentences = split_into_sentences(segment_text)
 
+        logger.info(
+            f"Processing segment {segment.get('id', 'unknown')}: '{segment_text[:50]}...' -> {len(sentences)} sentences")
+
         if len(sentences) <= 1:
+            # Односложный сегмент, оставляем как есть
             raw_segments.append({
                 "start": segment.get("start", 0),
                 "end": segment.get("end", 0),
                 "text": segment_text
             })
         else:
+            # Многосложный сегмент, разбиваем на предложения с точными временными метками
             for sentence in sentences:
-                timestamps = get_sentence_timestamps(sentence, segment, words_list)
+                timestamps = get_sentence_timestamps_precise(sentence, segment, words_list)
 
-                if not timestamps:
-                    logger.warning(f"Warning: Could not find timestamps for sentence: {sentence[:30]}...")
-                    continue
+                if timestamps:
+                    raw_segments.append({
+                        "start": timestamps["start"],
+                        "end": timestamps["end"],
+                        "text": sentence
+                    })
+                else:
+                    logger.warning(f"Could not get timestamps for sentence: {sentence[:30]}...")
 
-                raw_segments.append({
-                    "start": timestamps["start"],
-                    "end": timestamps["end"],
-                    "text": sentence
-                })
-
+    # Сортируем по времени начала
     raw_segments.sort(key=lambda x: x["start"])
+
+    logger.info(f"After sentence splitting: {len(raw_segments)} segments")
 
     # STEP 2: Merge short segments to meet minimum length requirement
     merged_segments = []
@@ -201,12 +374,21 @@ def optimize_transcription_segments(transcription_file, output_file=None, min_se
             "text": segment["text"]
         })
 
+    # Исправляем перекрытия
     for i in range(len(new_segments) - 1):
-        if new_segments[i]["end"] > new_segments[i + 1]["start"]:
-            midpoint = (new_segments[i]["end"] + new_segments[i + 1]["start"]) / 2
-            new_segments[i]["end"] = midpoint
-            new_segments[i + 1]["start"] = midpoint
-            logger.warning(f"Fixed overlap between segments {i} and {i + 1}")
+        current_seg = new_segments[i]
+        next_seg = new_segments[i + 1]
+
+        if current_seg["end"] > next_seg["start"]:
+            # Находим середину перекрытия и создаем небольшой зазор
+            overlap_mid = (current_seg["end"] + next_seg["start"]) / 2
+            gap = 0.05  # 50мс зазор
+
+            current_seg["end"] = overlap_mid - gap / 2
+            next_seg["start"] = overlap_mid + gap / 2
+
+            logger.warning(f"Fixed overlap between segments {i} and {i + 1}: "
+                           f"set boundary at {overlap_mid:.2f}s with {gap * 1000:.0f}ms gap")
 
     result = {
         "text": data.get("text", ""),

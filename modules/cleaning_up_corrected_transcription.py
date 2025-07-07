@@ -2,7 +2,6 @@ import os
 import json
 from utils.logger_config import setup_logger
 
-
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
@@ -46,8 +45,5 @@ def cleanup_transcript_segments(input_file, output_file=None):
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)
-
-    logger.info(f"Cleanup complete. Removed {removed_count} merged segments, cleaned {cleaned_count} text entries.")
-    logger.info(f"Result saved to {output_file}")
 
     return output_file

@@ -5,10 +5,9 @@ import subprocess
 from pydub import AudioSegment
 from utils.audio_utils import split_audio
 import openai
-from utils.logger_config import setup_logger
+from utils.logger_config import setup_logger, get_job_logger
 import whisper
 from typing import Optional, Dict, Any
-
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
@@ -16,34 +15,38 @@ _whisper_model = None
 _current_model_size = None
 
 
-def load_whisper_model(model_size: str = "large-v2", device: str = "auto"):
+def load_whisper_model(job_id, model_size: str = "large-v2", device: str = "auto"):
     global _whisper_model, _current_model_size
 
+    log = get_job_logger(logger, job_id)
+
     if _whisper_model is None or _current_model_size != model_size:
-        logger.info(f"Loading Whisper model: {model_size}")
+        log.info(f"Loading Whisper model: {model_size}")
         _whisper_model = whisper.load_model(model_size, device=device)
         _current_model_size = model_size
-        logger.info(f"Whisper model {model_size} loaded successfully")
+        log.info(f"Whisper model {model_size} loaded successfully")
 
     return _whisper_model
 
 
-def transcribe_local(file_path: str, source_language: Optional[str] = None,
+def transcribe_local(job_id, file_path: str, source_language: Optional[str] = None,
                      model_size: str = "large-v2", device: str = "cuda",
                      transcription_keywords: Optional[str] = None) -> Dict[str, Any]:
+    log = get_job_logger(logger, job_id)
+
     try:
-        logger.info(f"Downloading Whisper model: {model_size}...")
-        model = load_whisper_model("large-v2", device)
-        logger.info(f"Whisper model: {model_size} is ready!")
+        log.info(f"Downloading Whisper model: {model_size}...")
+        model = load_whisper_model(job_id, "large-v2", device)
+        log.info(f"Whisper model: {model_size} is ready!")
 
         base_prompt = "Add proper punctuation."
         if transcription_keywords:
             prompt = f"Keywords for transcription: {transcription_keywords}. {base_prompt}"
-            logger.info(f"Using keywords: {transcription_keywords}")
+            log.info(f"Using keywords: {transcription_keywords}")
         else:
             prompt = base_prompt
 
-        logger.info(f"Prompt: {prompt}")
+        log.info(f"Prompt: {prompt}")
 
         transcribe_params = {
             "word_timestamps": True,
@@ -52,12 +55,12 @@ def transcribe_local(file_path: str, source_language: Optional[str] = None,
             "prompt": prompt,
         }
 
-        logger.info(f"Starting transcription of {file_path}")
+        log.info(f"Starting transcription of {file_path}")
 
         if source_language:
-            result = model.transcribe(file_path, language=source_language, **transcribe_params)
+            result = model.transcribe(job_id, file_path, language=source_language, **transcribe_params)
         else:
-            result = model.transcribe(file_path, **transcribe_params)
+            result = model.transcribe(job_id, file_path, **transcribe_params)
 
         formatted_result = {
             "text": result["text"],
@@ -86,12 +89,12 @@ def transcribe_local(file_path: str, source_language: Optional[str] = None,
         if not formatted_result.get("text") and not formatted_result.get("segments"):
             raise ValueError(f"Empty transcription result for {file_path}")
 
-        logger.info(f"Transcription completed for {file_path}. Text length: {len(formatted_result['text'])}")
+        log.info(f"Transcription completed for {file_path}. Text length: {len(formatted_result['text'])}")
 
         return formatted_result
 
     except Exception as e:
-        logger.error(f"Error transcribing {file_path} with local Whisper: {str(e)}")
+        log.error(f"Error transcribing {file_path} with local Whisper: {str(e)}")
         raise ValueError(f"Failed to transcribe audio with local Whisper: {str(e)}")
 
 
@@ -103,6 +106,8 @@ def transcribe_audio_with_timestamps(
         openai_api_key=None,
         transcription_keywords=None
 ):
+    log = get_job_logger(logger, job_id)
+
     def get_precise_audio_duration(file_path):
         cmd = [
             "ffprobe",
@@ -115,13 +120,12 @@ def transcribe_audio_with_timestamps(
         return float(result.stdout.strip())
 
     initial_audio_duration = get_precise_audio_duration(input_audio)
-    logger.info(f"Initial audio duration: {initial_audio_duration:.3f} seconds")
+    log.info(f"Initial audio duration: {initial_audio_duration:.3f} seconds")
 
     temp_audio_chunks_dir = f"jobs/{job_id}/output/temp_audio_chunks"
     os.makedirs(temp_audio_chunks_dir, exist_ok=True)
-    os.makedirs(temp_audio_chunks_dir, exist_ok=True)
 
-    chunk_paths = split_audio(input_audio, temp_audio_chunks_dir)
+    chunk_paths = split_audio(job_id, input_audio, temp_audio_chunks_dir)
 
     full_result = {
         "text": "",
@@ -134,22 +138,29 @@ def transcribe_audio_with_timestamps(
     word_id = 0
 
     for i, chunk_path in enumerate(chunk_paths):
-        logger.info(f"Processing chunk {i + 1}/{len(chunk_paths)}: {chunk_path}")
+        log.info(f"Processing chunk {i + 1}/{len(chunk_paths)}: {chunk_path}")
 
         audio_chunk = AudioSegment.from_file(chunk_path)
         chunk_duration = len(audio_chunk) / 1000
 
-        # transcription_api = transcribe(chunk_path, source_language=source_language, openai_api_key=openai_api_key)
-
-        transcription = transcribe_local(
-            file_path=chunk_path,
+        transcription = transcribe(
+            job_id,
+            chunk_path,
             source_language=source_language,
+            openai_api_key=openai_api_key,
             transcription_keywords=transcription_keywords
         )
 
-        logger.info(f"Chunk {i + 1}/{len(chunk_paths)} transcribed. Text: {transcription.get('text', '')[:50]}...")
-        logger.info(f"Total number of segments: {len(transcription.get('segments', []))}")
-        logger.info(f"Total number of words: {len(transcription.get('words', []))}")
+        # transcription = transcribe_local(
+        #     job_id,
+        #     file_path=chunk_path,
+        #     source_language=source_language,
+        #     transcription_keywords=transcription_keywords
+        # )
+
+        log.info(f"Chunk {i + 1}/{len(chunk_paths)} transcribed. Text: {transcription.get('text', '')[:50]}...")
+        log.info(f"Total number of segments: {len(transcription.get('segments', []))}")
+        log.info(f"Total number of words: {len(transcription.get('words', []))}")
 
         full_result["text"] += (
             " " + transcription.get("text", "") if full_result["text"] else transcription.get("text", ""))
@@ -183,8 +194,8 @@ def transcribe_audio_with_timestamps(
     if full_result["segments"]:
         last_segment_end = full_result["segments"][-1]["end"]
         outro_gap_duration = max(0.0, initial_audio_duration - last_segment_end)
-        logger.info(f"Last segment ends at: {last_segment_end:.3f}s")
-        logger.info(f"Outro gap duration: {outro_gap_duration:.3f}s")
+        log.info(f"Last segment ends at: {last_segment_end:.3f}s")
+        log.info(f"Outro gap duration: {outro_gap_duration:.3f}s")
 
     full_result["outro_gap_duration"] = outro_gap_duration
 
@@ -194,11 +205,13 @@ def transcribe_audio_with_timestamps(
     if os.path.exists(temp_audio_chunks_dir) and len(chunk_paths) > 1:
         shutil.rmtree(temp_audio_chunks_dir)
 
-    logger.info(f"Timestamped transcription successfully finished! Result: {output_file}")
     return output_file
 
 
-def transcribe(file_path, source_language=None, openai_api_key=None):
+def transcribe(job_id, file_path, source_language=None, openai_api_key=None,
+               transcription_keywords: Optional[str] = None):
+    log = get_job_logger(logger, job_id)
+
     if not openai_api_key:
         raise ValueError("OpenAI API key is required for transcription step but not provided")
 
@@ -206,6 +219,13 @@ def transcribe(file_path, source_language=None, openai_api_key=None):
         language = source_language
     else:
         language = None
+
+    base_prompt = "Add proper punctuation. Ignore music in the beginning"
+    if transcription_keywords:
+        prompt = f"Keywords for transcription: {transcription_keywords}. {base_prompt}"
+        log.info(f"Using keywords: {transcription_keywords}")
+    else:
+        prompt = base_prompt
 
     try:
         client = openai.OpenAI(api_key=openai_api_key)
@@ -216,7 +236,8 @@ def transcribe(file_path, source_language=None, openai_api_key=None):
                 "file": audio_file,
                 "response_format": "verbose_json",
                 "timestamp_granularities": ["segment", "word"],
-                "temperature": 0.1
+                "temperature": 0.0,
+                "prompt": prompt
             }
 
             if language:
@@ -259,5 +280,5 @@ def transcribe(file_path, source_language=None, openai_api_key=None):
 
         return result
     except Exception as e:
-        logger.error(f"Error transcribing {file_path}: {str(e)}")
+        log.error(f"Error transcribing {file_path}: {str(e)}")
         raise ValueError(f"Failed to transcribe audio: {str(e)}")

@@ -1,12 +1,13 @@
 import os
 from pydub import AudioSegment
-from utils.logger_config import setup_logger
-
+from utils.logger_config import setup_logger, get_job_logger
 
 logger = setup_logger(name=__name__, log_file="logs/app.log")
 
 
-def split_audio(file_path, temp_audio_chunks_dir, max_size_mb=24):
+def split_audio(job_id, file_path, temp_audio_chunks_dir, max_size_mb=24):
+    log = get_job_logger(logger, job_id)
+
     os.makedirs(temp_audio_chunks_dir, exist_ok=True)
 
     audio = AudioSegment.from_file(file_path)
@@ -15,7 +16,7 @@ def split_audio(file_path, temp_audio_chunks_dir, max_size_mb=24):
     file_size = os.path.getsize(file_path)
 
     if file_size < max_size_mb * 1024 * 1024:
-        logger.info(f"Input audio-file {file_path} is smaller than {max_size_mb}MB, no need to split.")
+        log.info(f"Input audio-file {file_path} is smaller than {max_size_mb}MB, no need to split.")
         return [file_path]
 
     audio_duration_ms = len(audio)
@@ -30,11 +31,11 @@ def split_audio(file_path, temp_audio_chunks_dir, max_size_mb=24):
         chunk.export(chunk_path, format=file_extension)
 
         chunk_size_mb = os.path.getsize(chunk_path) / (1024 * 1024)
-        logger.info(f"Created chunk {len(chunks) + 1} with size: {chunk_size_mb:.2f}MB")
+        log.info(f"Created chunk {len(chunks) + 1} with size: {chunk_size_mb:.2f}MB")
 
         chunks.append(chunk_path)
 
-    logger.info(f"Split input audio-file {file_path} into {len(chunks)} chunks of max {max_size_mb}MB each")
+    log.info(f"Split input audio-file {file_path} into {len(chunks)} chunks of max {max_size_mb}MB each")
     return chunks
 
 
